@@ -7,6 +7,7 @@ import { Settings, Save, Columns, Monitor, MessageSquare, Mic, SpellCheck, Ungro
 import { useSettings } from "@/hooks/useSettings";
 import { getFileContent, saveFileContent } from "@/lib/github";
 import { useOfflineQueue } from "@/hooks/useOfflineQueue";
+import { useSession } from "next-auth/react";
 
 import SettingsModal from "../ui/SettingsModal";
 import EditorPane from "../editor/EditorPane";
@@ -14,6 +15,7 @@ import MarkdownPreview from "../editor/MarkdownPreview";
 import MistralChat from "../ai/MistralChat";
 import FileExplorer from "../files/FileExplorer";
 import AIToggleIcon from "../ui/AIToggleIcon";
+import LoginPromptModal from "../ui/LoginPromptModal";
 import { processDroppedFile, autoProcessContent } from "@/lib/AIOrchestrator";
 import { organizeContent, summarizeHighlight, transcribeAndCleanup } from "@/lib/mistral";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
@@ -34,6 +36,7 @@ const TITLE_MAP: Record<ViewId, string> = {
 
 export default function AppShell() {
     const { settings } = useSettings();
+    const { data: session } = useSession();
     const { isOnline, queueLength, addToQueue } = useOfflineQueue();
     // Simplified Mosaic Layout: Just Editor (and potentially Preview later)
     const [layout, setLayout] = useState<MosaicNode<ViewId> | null>("editor");
@@ -57,15 +60,13 @@ export default function AppShell() {
 
     // Live Transcription Logic
     const handleTranscriptionChunk = useCallback(async (blob: Blob) => {
-        if (!settings.mistralApiKey) {
-            console.warn("Transcription skipped: No API Key");
-            return;
-        }
+        // We use global key now
         console.log("Processing audio chunk...", { size: blob.size });
         try {
             // Note: We use the transcription settings model here
             // transcribeAndCleanup uses the passed model (e.g. voxtral-mini-2507) used for audio
-            const text = await transcribeAndCleanup(blob, settings.mistralApiKey, settings.aiFeatures.transcription.model);
+            // Pass undefined for apiKey to use global config
+            const text = await transcribeAndCleanup(blob, undefined, settings.aiFeatures.transcription.model);
             console.log("Transcription result:", text);
             if (text) {
                 setEditorContent(prev => prev + (prev.endsWith('\n') ? "" : " ") + text);
@@ -73,7 +74,7 @@ export default function AppShell() {
         } catch (e) {
             console.error("Live transcription failed details:", e);
         }
-    }, [settings.mistralApiKey]);
+    }, [settings.aiFeatures.transcription.model]);
 
     const { startRecording: startLiveTranscribe, stopRecording: stopLiveTranscribe } = useAudioRecorder(handleTranscriptionChunk);
 
@@ -118,8 +119,16 @@ export default function AppShell() {
                 lastProcessedContent.current = refined;
 
                 if (refined !== editorContent) {
-                    console.log("Auto-Processing Applied Changes");
-                    setEditorContent(refined);
+                    if (settings.aiFeatures.grammar.state === 'suggest') {
+                        console.log("Auto-Processing: Proposing Changes");
+                        setOriginalContent(editorContent);
+                        setProposedContent(refined);
+                        setEditorContent(refined);
+                        setShowDiff(true);
+                    } else {
+                        console.log("Auto-Processing: Applied Changes");
+                        setEditorContent(refined);
+                    }
                 } else {
                     console.log("Auto-Processing: No changes needed");
                 }
@@ -134,15 +143,16 @@ export default function AppShell() {
     }, [editorContent, settings.aiFeatures]);
 
     const handleLoadFile = async (path: string) => {
-        if (!settings.githubApiKey || !settings.githubRepo) {
-            alert("GitHub API Key or Repository not set in settings.");
+        const token = session?.accessToken as string;
+        if (!token || !settings.githubRepo) {
+            alert("Please sign in with GitHub and select a repository.");
             return;
         }
         const [owner, repo] = settings.githubRepo.split("/");
 
         setCurrentFilePath(path);
         try {
-            const content = await getFileContent(settings.githubApiKey, owner, repo, path);
+            const content = await getFileContent(token, owner, repo, path);
             setEditorContent(content);
             setOriginalContent(content);
             lastProcessedContent.current = content; // Reset tracker
@@ -156,8 +166,9 @@ export default function AppShell() {
     };
 
     const handleSave = async () => {
-        if (!currentFilePath || !settings.githubApiKey || !settings.githubRepo) {
-            alert("No file selected or GitHub settings missing. Please select a file or configure GitHub.");
+        const token = session?.accessToken as string;
+        if (!currentFilePath || !token || !settings.githubRepo) {
+            alert("No file selected or user not signed in. Please sign in.");
             return;
         }
         setIsSaving(true);
@@ -165,7 +176,7 @@ export default function AppShell() {
 
         try {
             if (isOnline) {
-                await saveFileContent(settings.githubApiKey, owner, repo, currentFilePath, editorContent);
+                await saveFileContent(token, owner, repo, currentFilePath, editorContent);
                 setOriginalContent(editorContent);
             } else {
                 throw new Error("Offline");
@@ -246,6 +257,9 @@ export default function AppShell() {
                     </div>
                 </div>
             )}
+
+            <LoginPromptModal />
+
             {/* Left Sidebar: Files */}
             <div className={`flex flex-col border-r border-white/5 transition-all duration-300 ease-in-out relative ${leftSidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
                 <div className="flex-1 overflow-hidden">
@@ -407,6 +421,7 @@ export default function AppShell() {
                                         value={editorContent}
                                         originalValue={showDiff && originalContent ? (originalContent ?? undefined) : undefined}
                                         onChange={(v) => setEditorContent(v || "")}
+                                        currentFilePath={currentFilePath}
                                     />
                                 ) : id === 'preview' ? (
                                     <MarkdownPreview content={editorContent} />

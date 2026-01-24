@@ -1,120 +1,98 @@
 "use client";
 
-import React, { useRef } from "react";
-import Editor, { OnMount, DiffEditor, DiffOnMount } from "@monaco-editor/react";
+import React, { useRef, useState, useEffect } from "react";
+// import Editor, { OnMount, DiffEditor, DiffOnMount } from "@monaco-editor/react"; // REMOVING Monaco
 import { useSettings } from "@/hooks/useSettings";
+import { useSession } from "next-auth/react";
+import { Loader2 } from "lucide-react";
+import matter from "gray-matter";
+import { uploadAsset } from "@/lib/github";
+import dynamic from "next/dynamic";
+import type { MDXEditorMethods } from '@mdxeditor/editor';
+
+// Dynamically import the editor to avoid SSR issues
+const InitializedMDXEditor = dynamic(
+    () => import('./InitializedMDXEditor'),
+    {
+        ssr: false,
+        loading: () => <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /></div>
+    }
+);
 
 interface EditorPaneProps {
     value: string;
     originalValue?: string;
     onChange: (value: string | undefined) => void;
     language?: string;
+    currentFilePath?: string | null;
 }
 
-export default function EditorPane({ value, originalValue, onChange, language = "markdown" }: EditorPaneProps) {
+export default function EditorPane({ value, originalValue, onChange, language = "markdown", currentFilePath }: EditorPaneProps) {
     const { settings } = useSettings();
-    const editorRef = useRef<any>(null);
-    const diffEditorRef = useRef<any>(null);
+    const { data: session } = useSession();
+    const editorRef = useRef<MDXEditorMethods>(null);
+    const [metadata, setMetadata] = useState<any>({});
+    const [body, setBody] = useState("");
+    const [isInternalUpdate, setIsInternalUpdate] = useState(false);
 
-    const handleEditorDidMount: OnMount = (editor, monaco) => {
-        editorRef.current = editor;
-        defineTheme(monaco);
+    // Parse incoming value into Metadata + Body
+    useEffect(() => {
+        if (isInternalUpdate) return;
+        try {
+            const { data, content } = matter(value);
+            setMetadata(data);
+            // If body didn't change (only metadata), we don't want to force re-render if not needed.
+            // But here we setBody which presumably updates the editor.
+            setBody(content);
+        } catch (e) {
+            setBody(value);
+        }
+    }, [value, isInternalUpdate]);
+
+    const updateContent = (newMetadata: any, newBody: string) => {
+        setIsInternalUpdate(true);
+        const newContent = matter.stringify(newBody, newMetadata);
+        onChange(newContent);
+        setTimeout(() => setIsInternalUpdate(false), 0);
     };
 
-    const handleDiffEditorDidMount: DiffOnMount = (editor, monaco) => {
-        diffEditorRef.current = editor;
-        defineTheme(monaco);
 
-        // Listen to changes in the modified editor
-        const modifiedEditor = editor.getModifiedEditor();
-        modifiedEditor.onDidChangeModelContent(() => {
-            onChange(modifiedEditor.getValue());
-        });
+
+    const handleChange = (newBody: string) => {
+        setBody(newBody);
+        updateContent(metadata, newBody);
     };
 
-    const defineTheme = (monaco: any) => {
-        monaco.editor.defineTheme('glass-dark', {
-            base: 'vs-dark',
-            inherit: true,
-            rules: [],
-            colors: {
-                'editor.background': '#00000000',
-                'editorGutter.background': '#00000000',
-                'editorLineNumber.foreground': '#555555',
-                'diffEditor.insertedTextBackground': '#22553330',
-                'diffEditor.removedTextBackground': '#66222230',
-            }
-        });
-        monaco.editor.setTheme('glass-dark');
-    };
+    const handleImageUpload = async (image: File): Promise<string> => {
+        const token = (session as any)?.accessToken;
+        if (!currentFilePath || !token || !settings.githubRepo) {
+            throw new Error("GitHub not configured or file not selected");
+        }
 
-    const getFontFamily = () => {
-        switch (settings.editorFont) {
-            case 'pixel': return "var(--font-pixel), 'Pixelify Sans', monospace";
-            case 'mono': return "var(--font-roboto-mono), 'Fira Code', monospace";
-            default: return "var(--font-outfit), system-ui, sans-serif";
+        try {
+            const [owner, repo] = settings.githubRepo.split("/");
+            const timestamp = Date.now();
+            // Replace spaces with dashes
+            const assetPath = `assets/${timestamp}-${image.name.replace(/\s+/g, '-')}`;
+
+            await uploadAsset(token, owner, repo, assetPath, image);
+            return `/assets/${timestamp}-${image.name.replace(/\s+/g, '-')}`;
+        } catch (e) {
+            console.error("Image upload failed", e);
+            throw e;
         }
     };
 
-    const commonOptions = {
-        minimap: { enabled: false },
-        fontSize: settings.editorFont === 'pixel' ? 20 : 16, // Pixel font needs to be larger
-        fontFamily: getFontFamily(),
-        fontLigatures: true,
-        wordWrap: "on" as const,
-        padding: { top: 20, bottom: 20 },
-        scrollBeyondLastLine: false,
-        smoothScrolling: true,
-        cursorBlinking: "smooth" as const,
-        cursorSmoothCaretAnimation: "on" as const,
-        formatOnPaste: true,
-        formatOnType: true,
-        lineNumbers: "on" as const,
-        glyphMargin: false,
-        folding: false,
-        lineDecorationsWidth: 10,
-        lineNumbersMinChars: 3,
-        renderLineHighlight: "none" as const,
-    };
-
-    // If originalValue is provided and different (or just provided to force diff mode), use DiffEditor
-    const showDiff = originalValue !== undefined && originalValue !== null;
-
-    // Persist model by providing a path
-    const editorPath = showDiff ? "diff-editor" : "editor-model.md";
-
     return (
-        <div className="h-full w-full overflow-hidden bg-transparent">
-            {showDiff ? (
-                <DiffEditor
-                    height="100%"
-                    language={language}
-                    original={originalValue}
-                    modified={value}
-                    onMount={handleDiffEditorDidMount}
-                    theme="glass-dark"
-                    options={{
-                        ...commonOptions,
-                        renderSideBySide: false, // Inline Diff
-                        readOnly: false,
-                        originalEditable: false,
-                        diffWordWrap: "on",
-                    }}
-                />
-            ) : (
-                <Editor
-                    height="100%"
-                    path={editorPath}
-                    defaultLanguage={language}
-                    defaultValue={value}
-                    value={value}
-                    onChange={onChange}
-                    theme="glass-dark"
-                    onMount={handleEditorDidMount}
-                    loading={<div className="text-muted-foreground text-sm p-4">Loading Editor...</div>}
-                    options={commonOptions}
-                />
-            )}
+        <div className="h-full w-full overflow-hidden bg-transparent flex flex-col">
+
+
+            <InitializedMDXEditor
+                editorRef={editorRef}
+                value={body}
+                onChange={handleChange}
+                imageUploadHandler={handleImageUpload}
+            />
         </div>
     );
 }

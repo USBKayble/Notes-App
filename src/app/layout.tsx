@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Roboto_Mono, Pixelify_Sans } from "next/font/google";
 import "./globals.css";
 import { SettingsProvider } from "@/hooks/useSettings";
+import AuthSessionProvider from "@/components/layout/SessionProvider";
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -32,12 +33,14 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${outfit.variable} ${robotoMono.variable} ${pixelifySans.variable} font-sans bg-background text-foreground antialiased selection:bg-primary/30 selection:text-white`}>
         <SettingsProvider>
-          <main className="min-h-screen relative overflow-hidden">
-            {/* Ambient Background Effects */}
-            <div className="fixed inset-0 z-[-1] bg-[radial-gradient(circle_at_50%_120%,rgba(120,50,255,0.1),rgba(0,0,0,0)_50%)]" />
-            <div className="fixed inset-0 z-[-1] bg-[radial-gradient(circle_at_0%_0%,rgba(50,200,255,0.05),rgba(0,0,0,0)_40%)]" />
-            {children}
-          </main>
+          <AuthSessionProvider>
+            <main className="min-h-screen relative overflow-hidden">
+              {/* Ambient Background Effects */}
+              <div className="fixed inset-0 z-[-1] bg-[radial-gradient(circle_at_50%_120%,rgba(120,50,255,0.1),rgba(0,0,0,0)_50%)]" />
+              <div className="fixed inset-0 z-[-1] bg-[radial-gradient(circle_at_0%_0%,rgba(50,200,255,0.05),rgba(0,0,0,0)_40%)]" />
+              {children}
+            </main>
+          </AuthSessionProvider>
         </SettingsProvider>
       </body>
     </html>

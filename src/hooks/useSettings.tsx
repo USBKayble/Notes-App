@@ -5,8 +5,6 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 export type AIFeatureState = "off" | "suggest" | "apply";
 
 export interface AppSettings {
-    mistralApiKey: string;
-    githubApiKey: string;
     githubRepo: string; // "owner/repo"
     selectedModel: string;      // General Chat fallback
 
@@ -23,8 +21,6 @@ export interface AppSettings {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-    mistralApiKey: "",
-    githubApiKey: "",
     githubRepo: "",
     selectedModel: "mistral-large-latest",
 

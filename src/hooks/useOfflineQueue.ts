@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { queueStore, QueueItem } from "@/lib/queue-store";
 import { saveFileContent } from "@/lib/github";
 import { useSettings } from "@/hooks/useSettings";
+import { useSession } from "next-auth/react";
 
 export function useOfflineQueue() {
     const { settings } = useSettings();
+    const { data: session } = useSession();
     const [isOnline, setIsOnline] = useState(true);
     const [queueLength, setQueueLength] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -41,7 +43,9 @@ export function useOfflineQueue() {
 
     // Processor
     const processQueue = useCallback(async () => {
-        if (!isOnline || isProcessing || !settings.githubApiKey || !settings.mistralApiKey) return;
+        const token = session?.accessToken;
+        // Don't need mistral key check as it is global now
+        if (!isOnline || isProcessing || !token) return;
 
         try {
             setIsProcessing(true);
@@ -56,7 +60,9 @@ export function useOfflineQueue() {
                     switch (item.type) {
                         case 'FILE_SAVE': {
                             const { owner, repo, path, content, sha } = item.payload;
-                            await saveFileContent(settings.githubApiKey, owner, repo, path, content, sha);
+                            if (token) {
+                                await saveFileContent(token, owner, repo, path, content, sha);
+                            }
                             break;
                         }
                         case 'AI_JOB': {
@@ -78,7 +84,7 @@ export function useOfflineQueue() {
             setIsProcessing(false);
             updateQueueLength();
         }
-    }, [isOnline, isProcessing, settings.githubApiKey, settings.mistralApiKey, updateQueueLength]);
+    }, [isOnline, isProcessing, session, updateQueueLength]);
 
     // Auto-process when coming online
     useEffect(() => {

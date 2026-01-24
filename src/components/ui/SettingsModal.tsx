@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { X, ExternalLink, Key } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { fetchMistralModels } from "@/lib/mistral";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -12,6 +13,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const { settings, updateSettings } = useSettings();
+    const { data: session } = useSession();
     const [formState, setFormState] = useState(settings);
     const [models, setModels] = useState<{ id: string }[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
@@ -21,17 +23,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setFormState(settings);
     }, [settings]);
 
-    // Fetch models only when modal opens or key changes
+    // Fetch models only when modal opens
     React.useEffect(() => {
-        if (isOpen && settings.mistralApiKey) {
+        if (isOpen) {
             setLoadingModels(true);
-            fetchMistralModels(settings.mistralApiKey)
+            // We use the global key now, no longer in settings
+            fetchMistralModels()
                 .then(mods => {
                     setModels(mods);
                 })
                 .finally(() => setLoadingModels(false));
         }
-    }, [isOpen, settings.mistralApiKey]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -60,193 +63,47 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-300 flex justify-between">
                             Mistral API Key
-                            <a
-                                href="https://console.mistral.ai/api-keys/"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-purple-400 text-xs flex items-center gap-1 hover:underline"
-                            >
-                                Get Key <ExternalLink size={10} />
-                            </a>
                         </label>
-                        <input
-                            type="password"
-                            value={formState.mistralApiKey}
-                            onChange={(e) =>
-                                setFormState({ ...formState, mistralApiKey: e.target.value })
-                            }
-                            className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors placeholder:text-gray-600"
-                            placeholder="sk-..."
-                        />
-                    </div>
-
-                    {/* Model Selection Group */}
-                    <div className="space-y-4 border-t border-white/10 pt-4">
-                        <label className="text-sm font-bold text-gray-200 flex justify-between items-center">
-                            AI Stack Configuration
-                            <button
-                                onClick={async () => {
-                                    setLoadingModels(true);
-                                    const mods = await fetchMistralModels(formState.mistralApiKey);
-                                    setModels(mods);
-                                    setLoadingModels(false);
-                                }}
-                                className="text-xs text-purple-400 hover:text-white transition-colors"
-                                disabled={!formState.mistralApiKey || loadingModels}
-                            >
-                                {loadingModels ? "Loading..." : "Refresh Models"}
-                            </button>
-                        </label>
-
-                        {/* General Chat */}
-                        <div className="space-y-1">
-                            <label className="text-xs text-gray-400">General Chat Fallback</label>
-                            <select
-                                value={formState.selectedModel}
-                                onChange={(e) => setFormState({ ...formState, selectedModel: e.target.value })}
-                                className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-[11px] text-white focus:outline-none focus:border-purple-500 transition-colors"
-                            >
-                                <option value="mistral-large-latest">mistral-large-latest (Recommended)</option>
-                                {models.map((m) => (
-                                    <option key={m.id} value={m.id}>{m.id}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Feature Configs */}
-                        {(Object.keys(formState.aiFeatures) as (keyof typeof formState.aiFeatures)[]).map((featureKey) => (
-                            <div key={featureKey} className="p-3 bg-white/5 rounded-lg border border-white/5 space-y-2">
-                                <div className="flex justify-between items-center capitalize">
-                                    <span className="text-xs font-medium text-gray-300">{featureKey}</span>
-                                    <div className="flex gap-1 bg-black/20 p-1 rounded-md">
-                                        {(['off', 'suggest', 'apply'] as const).map((s) => (
-                                            <button
-                                                key={s}
-                                                onClick={() => {
-                                                    const feat = formState.aiFeatures[featureKey];
-                                                    setFormState({
-                                                        ...formState,
-                                                        aiFeatures: {
-                                                            ...formState.aiFeatures,
-                                                            [featureKey]: { ...feat, state: s }
-                                                        }
-                                                    });
-                                                }}
-                                                className={`px-2 py-0.5 text-[10px] rounded transition-all ${formState.aiFeatures[featureKey].state === s
-                                                    ? 'bg-purple-600 text-white shadow-sm'
-                                                    : 'text-gray-500 hover:text-gray-300'
-                                                    }`}
-                                            >
-                                                {s}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-1 gap-2">
-                                    <select
-                                        value={formState.aiFeatures[featureKey].model}
-                                        onChange={(e) => {
-                                            const feat = formState.aiFeatures[featureKey];
-                                            setFormState({
-                                                ...formState,
-                                                aiFeatures: {
-                                                    ...formState.aiFeatures,
-                                                    [featureKey]: { ...feat, model: e.target.value }
-                                                }
-                                            });
-                                        }}
-                                        className="w-full bg-black/40 border border-white/5 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-purple-500/50"
-                                    >
-                                        <option value="">Select Model...</option>
-                                        {models.map((m) => (
-                                            <option key={m.id} value={m.id}>{m.id}</option>
-                                        ))}
-                                    </select>
-
-                                    {featureKey === 'transcription' && (
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] text-gray-500 uppercase tracking-tighter">Cleanup</label>
-                                                <select
-                                                    value={formState.aiFeatures.transcription.cleanupModel}
-                                                    onChange={(e) => {
-                                                        const t = formState.aiFeatures.transcription;
-                                                        setFormState({
-                                                            ...formState,
-                                                            aiFeatures: { ...formState.aiFeatures, transcription: { ...t, cleanupModel: e.target.value } }
-                                                        });
-                                                    }}
-                                                    className="w-full bg-black/40 border border-white/5 rounded px-2 py-1 text-[10px] text-white"
-                                                >
-                                                    {models.map((m) => (<option key={m.id} value={m.id}>{m.id}</option>))}
-                                                </select>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] text-gray-500 uppercase tracking-tighter">Grammar</label>
-                                                <select
-                                                    value={formState.aiFeatures.transcription.grammarModel}
-                                                    onChange={(e) => {
-                                                        const t = formState.aiFeatures.transcription;
-                                                        setFormState({
-                                                            ...formState,
-                                                            aiFeatures: { ...formState.aiFeatures, transcription: { ...t, grammarModel: e.target.value } }
-                                                        });
-                                                    }}
-                                                    className="w-full bg-black/40 border border-white/5 rounded px-2 py-1 text-[10px] text-white"
-                                                >
-                                                    {models.map((m) => (<option key={m.id} value={m.id}>{m.id}</option>))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Editor Section */}
-                    <div className="space-y-4 border-t border-white/10 pt-4">
-                        <label className="text-sm font-bold text-gray-200">Editor</label>
-                        <div className="space-y-1">
-                            <label className="text-xs text-gray-400">Font Family</label>
-                            <select
-                                value={formState.editorFont || "inter"}
-                                onChange={(e) => setFormState({ ...formState, editorFont: e.target.value as any })}
-                                className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
-                            >
-                                <option value="inter">Modern Sans (Inter/Outfit)</option>
-                                <option value="mono">Developer Mono</option>
-                                <option value="pixel">Retro Pixel (Pixelify)</option>
-                            </select>
+                        <div className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-gray-500 italic">
+                            Managed by Administrator (Global Static Key)
                         </div>
                     </div>
 
                     {/* Github Section */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 border-t border-white/10 pt-4">
                         <label className="text-sm font-medium text-gray-300 flex justify-between">
-                            GitHub Personal Token
-                            <a
-                                href="https://github.com/settings/tokens"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-purple-400 text-xs flex items-center gap-1 hover:underline"
-                            >
-                                Get Token <ExternalLink size={10} />
-                            </a>
+                            GitHub Account
                         </label>
-                        <input
-                            type="password"
-                            value={formState.githubApiKey}
-                            onChange={(e) =>
-                                setFormState({ ...formState, githubApiKey: e.target.value })
-                            }
-                            className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors placeholder:text-gray-600"
-                            placeholder="ghp_..."
-                        />
-                        <p className="text-xs text-gray-500">
-                            Required for syncing notes to your repository.
-                        </p>
+
+                        {!session ? (
+                            <button
+                                onClick={() => signIn('github')}
+                                className="w-full bg-white text-black font-semibold rounded-md px-3 py-2 text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                            >
+                                <ExternalLink size={14} />
+                                Sign in with GitHub
+                            </button>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10">
+                                    {session.user?.image && (
+                                        <img src={session.user.image} alt="User" className="w-8 h-8 rounded-full" />
+                                    )}
+                                    <div className="flex-1 overflow-hidden">
+                                        <p className="text-sm font-medium text-white truncate">{session.user?.name}</p>
+                                        <p className="text-xs text-gray-400 truncate">{session.user?.email}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => signOut()}
+                                        className="text-xs text-red-400 hover:text-red-300 hover:underline"
+                                    >
+                                        Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
+
 
                     {/* Repo Section */}
                     <div className="space-y-2">

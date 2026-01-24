@@ -25,7 +25,7 @@ export const autoProcessContent = async (content: string, settings: AppSettings)
     // 1. Grammar & Spelling (Auto-Process)
     // The user requested "Grammar" and "Transcription Refinement" to be auto.
     // applyGrammarAndSpelling handles general cleanup/correction which covers both cases effectively.
-    if (aiFeatures.grammar.state === 'apply') {
+    if (aiFeatures.grammar.state === 'apply' || aiFeatures.grammar.state === 'suggest') {
         currentText = await applyGrammarAndSpelling(currentText, settings);
     }
 
