@@ -68,10 +68,11 @@ export const transcribeAndCleanup = async (audioBlob: Blob, apiKey?: string, mod
     let text = "";
     try {
         const response = await client.audio.transcriptions.complete({
-            file: audioBlob as any,
+            file: audioBlob as File,
             model: model,
         });
-        text = (response as any).text || "";
+
+        text = response.text || "";
     } catch (e) {
         console.error("Transcription failed", e);
         return "";
@@ -83,7 +84,7 @@ export const transcribeAndCleanup = async (audioBlob: Blob, apiKey?: string, mod
         const cleanup = await client.chat.complete({
             model: "mistral-small-latest",
             messages: [
-                { role: "system", content: "You are an expert transcription editor. Clean up the provided text to be a coherent, polished note. Fix punctuation, remove filler words (um, ah, like), and correct phonetic errors. Keep the tone natural but professional. Output ONLY the cleaned text. Do not include any introductory text, output labels, or markdown code blocks." },
+                { role: "system", content: "Clean up transcription. Fix punctuation, spelling, remove filler words, and correct phonetic errors. Keep original tone. LaTeX: $ for inline, $$ for block. Output ONLY cleaned text." },
                 { role: "user", content: text }
             ]
         });
@@ -102,15 +103,20 @@ export const transcriptionChain = async (audioBlob: Blob, settings: AppSettings)
     return transcribeAndCleanup(audioBlob, undefined, settings.aiFeatures.transcription.model);
 };
 
+export interface MediaUnderstandingResult {
+    description: string;
+    ocrMarkdown: string;
+    combined: string;
+}
+
 /**
  * 2. Media Pipeline
  */
-export const mediaUnderstanding = async (file: File | Blob, settings: AppSettings) => {
+export const mediaUnderstanding = async (file: File | Blob, settings: AppSettings): Promise<MediaUnderstandingResult | null> => {
     const { aiFeatures } = settings;
     const client = getMistralClient();
     if (!client) throw new Error("API Key missing");
 
-    let resultText = "";
     const isImage = file.type.startsWith('image/');
 
     try {
@@ -120,9 +126,10 @@ export const mediaUnderstanding = async (file: File | Blob, settings: AppSetting
                 document: {
                     type: "image_url",
                     imageUrl: URL.createObjectURL(file)
-                } as any
+                } as never // SDK document type mismatch with imageUrl
             });
-            const ocrMarkdown = (ocrResponse as any).pages?.map((p: any) => p.markdown).join("\n") || "";
+
+            const ocrMarkdown = ocrResponse.pages?.map((p: { markdown: string }) => p.markdown).join("\n") || "";
 
             const vision = await client.chat.complete({
                 model: aiFeatures.media.model || "pixtral-12b-2409",
@@ -130,26 +137,31 @@ export const mediaUnderstanding = async (file: File | Blob, settings: AppSetting
                     {
                         role: "user",
                         content: [
-                            { type: "text", text: "Analyze this image. If it's a document, summarize its purpose. If it's a scene, describe it. Mention key subjects. \n- Format output as clean Markdown.\n- Use Headers (###) for sections.\n- Use bullet points for details.\n- Output ONLY the analysis text.\n- Do not be conversational.\n- Do not use code blocks." },
+                            { type: "text", text: "Analyze this image. Summarize documents or describe scenes/subjects. Output ONLY clean Markdown (Headers, Bullets). No code blocks." },
                             { type: "image_url", imageUrl: URL.createObjectURL(file) }
                         ]
                     }
                 ]
             });
-            const analysis = vision.choices?.[0].message.content || "";
-            resultText = `### Media Analysis\n${analysis}\n\n### OCR Result\n${ocrMarkdown}`;
+            const messageContent = vision.choices?.[0].message.content;
+            const analysis = typeof messageContent === 'string' ? messageContent : "";
+            return {
+                description: analysis,
+                ocrMarkdown: ocrMarkdown,
+                combined: `### Media Analysis\n${analysis}\n\n### OCR Result\n${ocrMarkdown}`
+            };
         }
     } catch (e) {
         console.error("Media processing failed", e);
     }
 
-    return resultText;
+    return null;
 };
 
 /**
  * 3. Organization
  */
-export const organizeContent = async (text: string, settings: AppSettings) => {
+export const organizeContent = async (text: string, settings: AppSettings, context?: string) => {
     const { aiFeatures } = settings;
     const client = getMistralClient();
     if (!client) return text;
@@ -160,12 +172,7 @@ export const organizeContent = async (text: string, settings: AppSettings) => {
             messages: [
                 {
                     role: "system",
-                    content: `You are an expert note organizer. Reorganize the provided text into a clean, structured Markdown document.
-                    - Use Markdown Headers (#, ##) for logical sections.
-                    - Use bullet points for lists.
-                    - Keep all original information intact; do not summarize, just structure.
-                    - Output ONLY the raw Markdown content. 
-                    - STRICTLY NO introductory text, no "Here is the organized note", and no markdown code blocks.`
+                    content: `Structure the text using Markdown. Contextual Grouping: Move related blocks together with MINIMAL changes to original text. DO NOT paraphrase. DO NOT rewrite. LaTeX: Use $ for inline, $$ for block. Output ONLY Markdown.${context ? `\n\nContext for organization: ${context}` : ""}`
                 },
                 { role: "user", content: text }
             ]
@@ -189,7 +196,7 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
         const res = await client.chat.complete({
             model: aiFeatures.summarization.model || "mistral-large-latest",
             messages: [
-                { role: "system", content: "Provide a concise, high-level summary of the following text in bullet points. Format the output as a Markdown blockquote starting with '> [!SUMM]'. Output ONLY the raw blockquote. Do NOT wrap in code blocks or include any other text." },
+                { role: "system", content: "Summarize in bullets. Wrap in '> [!SUMM]' blockquote. LaTeX: Use $ for inline. Output ONLY blockquote." },
                 { role: "user", content: text }
             ]
         });
@@ -223,14 +230,12 @@ export const synthesizeNote = async (currentNote: string, newContext: string, me
             messages: [
                 {
                     role: "system",
-                    content: `You are an expert note synthesizer. Merge the New Information into the Existing Note seamlessly. 
-                    - Place the new info where it logically belongs (by topic).
-                    - If the topic exists, enhance it.
-                    - If it's new, add a new section.
-                    - Insert the reference marker "[Reff: ${mediaReff}]" exactly where the new information is added.
-                    - Maintain the existing style/markdown.
-                    - Output ONLY the merged note content. 
-                    - STRICTLY do not include any conversational filler or wrap the output in markdown code blocks (such as \`\`\`markdown).`
+                    content: `Integrate 'New Information' into 'Existing Note'.
+                    1. **STRICT RULE**: Do NOT change a single character of the 'Existing Note'.
+                    2. **Insertion**: Insert new info into the most relevant section OR append to end.
+                    3. **LaTeX**: Use $ for inline, $$ for block.
+                    4. **Ref**: Ensure the media reference (like ![image](${mediaReff}) or [link](${mediaReff})) is included.
+                    5. **Output**: ONLY merged Markdown.`
                 },
                 {
                     role: "user",
@@ -260,7 +265,7 @@ export const applyGrammarAndSpelling = async (text: string, settings: AppSetting
             messages: [
                 {
                     role: "system",
-                    content: "You are a fast, precise grammar assistant. Fix grammar, spelling, and punctuation errors in the text. \n- STRICTLY PRESERVE Markdown formatting (headers, bold, italics, links).\n- DO NOT change the writing style or tone.\n- DO NOT make optional stylistic changes; only fix objective errors.\n- Output ONLY the corrected text.\n- Do NOT wrap in code blocks.\n- Do NOT include any conversational filler."
+                    content: "Fix grammar, spelling, and typos using INLINE EDITS ONLY. Ensure all words are spelled correctly. DO NOT rewrite or paraphrase. STRICTLY preserve Markdown and LaTeX ($ for inline, $$ for block). Output ONLY corrected text."
                 },
                 { role: "user", content: text }
             ]
@@ -276,9 +281,10 @@ export const applyGrammarAndSpelling = async (text: string, settings: AppSetting
  * 7. Conversational Chat
  */
 export const chatWithMistral = async (
-    history: { role: 'user' | 'assistant' | 'tool'; content: string; tool_calls?: any[]; name?: string; tool_call_id?: string }[],
+    history: { role: 'user' | 'assistant' | 'tool'; content: string; toolCalls?: unknown[]; toolCallId?: string; name?: string }[],
     currentDoc: string,
-    settings: AppSettings
+    settings: AppSettings,
+    onChunk: (text: string) => void
 ) => {
     const { selectedModel } = settings;
     const client = getMistralClient();
@@ -300,7 +306,7 @@ export const chatWithMistral = async (
             type: "function",
             function: {
                 name: "write_active_note",
-                description: "Rewrite the active note with new content. This replaces the entire note.",
+                description: "Overwrites the ENTIRE active note with new content.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -313,100 +319,175 @@ export const chatWithMistral = async (
                 },
             },
         },
+        {
+            type: "function",
+            function: {
+                name: "replace_text",
+                description: "A patch tool to find and replace specific text. Use this for small edits.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        target: {
+                            type: "string",
+                            description: "The exact text segment to find in the note.",
+                        },
+                        replacement: {
+                            type: "string",
+                            description: "The text to replace the target with."
+                        }
+                    },
+                    required: ["target", "replacement"],
+                },
+            },
+        }
     ];
 
-    const systemPrompt = `You are an expert AI assistant integrated into a note-taking application.
-    - You can read and write the active note using the provided tools.
-    - When the user asks to edit, rewrite, or update the note, you MUST use the \`write_active_note\` tool.
-    - If you use \`write_active_note\`, do not include the <updated_note> tags manually; the tool handles it.
-    - Be concise but helpful.`;
+    const systemPrompt = `Expert AI note assistant.
+    - Use tools for edits. INLINE EDITS preferred.
+    - Minimal changes to existing text.
+    - LaTeX math: $ for inline, $$ for block.
+    - Concise responses.`;
 
-    let currentMessages = [
+    const currentMessages = [
         { role: "system", content: systemPrompt },
         ...history
     ];
 
     try {
-        console.log("Sending chat request to Mistral...");
-        const response = await client.chat.complete({
+        console.log("Starting chat stream...");
+
+        const responseStream = await client.chat.stream({
             model: selectedModel || "mistral-large-latest",
-            messages: currentMessages as any,
-            tools: tools as any,
+            messages: currentMessages as never,
+            tools: tools as never,
             toolChoice: "auto",
         });
 
-        const choice = response.choices?.[0];
-        const message = choice?.message;
+        let fullContent = "";
+        const toolCallAccumulator: { id: string, function: { name: string, arguments: string }, type: string }[] = [];
 
-        // If no tool call, just return content
-        if (!message?.toolCalls || message.toolCalls.length === 0) {
-            return message?.content || "";
-        }
+        for await (const chunk of responseStream) {
+            const choice = chunk.data.choices[0];
+            const delta = choice?.delta;
 
-        // Handle Tool Calls
-        const toolCalls = message.toolCalls;
-        currentMessages.push(message as any); // Add assistant's tool call request to history
-
-        for (const toolCall of toolCalls) {
-            const functionName = toolCall.function.name;
-            const functionArgs = typeof toolCall.function.arguments === 'string'
-                ? JSON.parse(toolCall.function.arguments)
-                : toolCall.function.arguments;
-
-            let toolResult = "";
-
-            if (functionName === "read_active_note") {
-                console.log("Tool Call: reading active note");
-                toolResult = currentDoc;
-            } else if (functionName === "write_active_note") {
-                console.log("Tool Call: writing active note");
-                // We don't actually write here, we just return a success message
-                // AND we will inject the <updated_note> tag in the final response 
-                // so the UI picks it up.
-                toolResult = "Note updated successfully.";
-
-                // Hack: We append the diff tag to the FINAL response by forcing a follow-up
-                // effectively "confirming" the action.
-                // However, the tool result itself is just for the LLM's context.
+            if (delta?.content) {
+                fullContent += delta.content;
+                onChunk(fullContent);
             }
 
-            currentMessages.push({
-                role: "tool",
-                name: functionName,
-                content: toolResult,
-                tool_call_id: toolCall.id,
-            } as any);
-        }
-
-        // Second API call to get the final answer after tool execution
-        const finalResponse = await client.chat.complete({
-            model: selectedModel || "mistral-large-latest",
-            messages: currentMessages as any,
-            tools: tools as any,
-            toolChoice: "auto",
-        });
-
-        const finalContent = finalResponse.choices?.[0].message.content || "";
-
-        // If the tool was write_active_note, we need to append the <updated_note> tag 
-        // if the model didn't do it (it shouldn't have, we told it not to).
-        // Actually, let's look at the tool calls from the *previous* turn to see if we wrote.
-        const wasWriteTriggered = toolCalls.some(tc => tc.function.name === "write_active_note");
-
-        if (wasWriteTriggered) {
-            // Find the content
-            const writeCall = toolCalls.find(tc => tc.function.name === "write_active_note");
-            if (writeCall) {
-                const args = typeof writeCall.function.arguments === 'string'
-                    ? JSON.parse(writeCall.function.arguments)
-                    : writeCall.function.arguments;
-                const newContent = args.content;
-                // Append the magic tag hiddenly or explicitly
-                return `${finalContent}\n\n<updated_note>${newContent}</updated_note>`;
+            if (delta?.toolCalls) {
+                // Accumulate tool calls
+                delta.toolCalls.forEach((tc: any) => {
+                    const index = tc.index;
+                    if (!toolCallAccumulator[index]) {
+                        toolCallAccumulator[index] = {
+                            id: "",
+                            function: { name: "", arguments: "" },
+                            type: "function"
+                        };
+                    }
+                    if (tc.id) toolCallAccumulator[index].id += tc.id;
+                    if (tc.function?.name) toolCallAccumulator[index].function.name += tc.function.name;
+                    if (tc.function?.arguments) toolCallAccumulator[index].function.arguments += tc.function.arguments;
+                });
             }
         }
 
-        return finalContent;
+        // Processing completed for this turn
+        if (toolCallAccumulator.length > 0) {
+            // We have tool calls
+            const assistantMessage = {
+                role: "assistant", // "assistant"
+                content: fullContent || null, // Ensure strict null if empty
+                toolCalls: toolCallAccumulator
+            };
+            currentMessages.push(assistantMessage as never);
+
+            // Execute tools
+            for (const toolCall of toolCallAccumulator) {
+                const functionName = toolCall.function.name;
+                const functionArgs = JSON.parse(toolCall.function.arguments);
+
+                let toolResult = "";
+                console.log(`Executing tool: ${functionName}`);
+
+                if (functionName === "read_active_note") {
+                    toolResult = currentDoc;
+                } else if (functionName === "write_active_note") {
+                    toolResult = "Note updated successfully.";
+                } else if (functionName === "replace_text") {
+                    const { target, replacement } = functionArgs;
+                    if (currentDoc.includes(target)) {
+                        const newDoc = currentDoc.replace(target, replacement);
+                        toolResult = "Replacement successful.";
+                        // Store the new doc state so subsequent tools or recursive calls see it?
+                        // Actually we need to push the UPDATE to the UI.
+                        // We do this by treating it like write_active_note for the UI hook.
+                        // But we need to inject the full content into the magic tag.
+                        currentDoc = newDoc; // Update local context reference
+                    } else {
+                        toolResult = "Error: Target text not found in document.";
+                    }
+                }
+
+                currentMessages.push({
+                    role: "tool",
+                    name: functionName,
+                    content: toolResult,
+                    toolCallId: toolCall.id, // Correct CamelCase property
+                } as never); // Cast to avoid any
+            }
+
+            // Recursive call for the final answer
+            let finalAnswer = "";
+            const innerOnChunk = (text: string) => {
+                finalAnswer = text;
+                onChunk(text); // Propagate stream up
+            };
+
+            // @ts-expect-error - Recursive call message types
+            await chatWithMistral(currentMessages.slice(1), currentDoc, settings, innerOnChunk);
+
+            // Robust check through the accumulator and message history
+            const writeCall = toolCallAccumulator.find(tc => tc.function.name === "write_active_note");
+            const replaceCalls = toolCallAccumulator.filter(tc => tc.function.name === "replace_text");
+
+            // Allow if write_active_note was called OR if any replace_text succeeded
+            let shouldUpdate = !!writeCall;
+
+            // Check if replacements succeeded by looking at the tool results we pushed
+            if (!shouldUpdate && replaceCalls.length > 0) {
+                // The tool messages are the last N messages in currentMessages
+                const toolMessages = currentMessages.slice(-toolCallAccumulator.length);
+                const successfulReplace = toolMessages.some(m => m.role === 'tool' && m.content === "Replacement successful.");
+                if (successfulReplace) shouldUpdate = true;
+            }
+
+            if (shouldUpdate) {
+                // If we did a rewrite, get content from args.
+                // If we did a replace, get content from currentDoc (which we patched locally).
+                let finalDocContent = currentDoc;
+
+                const writeCall = toolCallAccumulator.find(tc => tc.function.name === "write_active_note");
+                if (writeCall) {
+                    const args = JSON.parse(writeCall.function.arguments);
+                    finalDocContent = args.content;
+                }
+
+                // If it was replace_text, currentDoc is already updated above.
+
+                const magicTag = `\n\n<updated_note>${finalDocContent}</updated_note>`;
+                console.log("Injecting <updated_note> tag with length:", finalDocContent.length);
+                onChunk(finalAnswer + magicTag);
+                return finalAnswer + magicTag;
+            } else {
+                console.log("No write/replace triggered, returning normal response.");
+            }
+
+            return finalAnswer;
+        }
+
+        return fullContent;
 
     } catch (e) {
         console.error("Chat failed", e);

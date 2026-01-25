@@ -205,12 +205,20 @@ export const saveFileContent = async (token: string, owner: string, repo: string
             }
         }
 
+        // Helper for Unicode-safe Base64
+        const toBase64 = (str: string) => {
+            if (typeof Buffer !== 'undefined') {
+                return Buffer.from(str).toString('base64');
+            }
+            return btoa(unescape(encodeURIComponent(str)));
+        };
+
         await octokit.rest.repos.createOrUpdateFileContents({
             owner,
             repo,
             path,
             message: `Update ${path} via Mistral Notes`,
-            content: btoa(content), // buffer conversion validation needed for unicode
+            content: toBase64(content),
             sha: fileSha,
         });
     } catch (e) {

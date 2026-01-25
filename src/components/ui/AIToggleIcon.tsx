@@ -8,10 +8,9 @@ interface AIToggleIconProps {
     feature: keyof ReturnType<typeof useSettings>["settings"]["aiFeatures"];
     icon: React.ReactNode;
     label: string;
-    allowedStates?: AIFeatureState[];
 }
 
-export default function AIToggleIcon({ feature, icon, label, allowedStates = ["off", "suggest", "apply"] }: AIToggleIconProps) {
+export default function AIToggleIcon({ feature, icon, label }: AIToggleIconProps) {
     const { settings, updateSettings } = useSettings();
     const [showDropdown, setShowDropdown] = useState(false);
 
@@ -19,8 +18,9 @@ export default function AIToggleIcon({ feature, icon, label, allowedStates = ["o
     const state = config.state;
 
     const cycleState = () => {
-        const states: AIFeatureState[] = allowedStates;
-        const nextState = states[(states.indexOf(state) + 1) % states.length];
+        // Simplify to Binary: Off -> Apply -> Off
+        // If current is off, go to apply. If apply (or suggest), go to off.
+        const nextState: AIFeatureState = state === 'off' ? 'apply' : 'off';
 
         updateSettings({
             aiFeatures: {
@@ -33,7 +33,7 @@ export default function AIToggleIcon({ feature, icon, label, allowedStates = ["o
     const getStatusColor = () => {
         switch (state) {
             case "apply": return "text-green-400 bg-green-400/10 border-green-400/20";
-            case "suggest": return "text-yellow-400 bg-yellow-400/10 border-yellow-400/20";
+            case "suggest": return "text-green-400 bg-green-400/10 border-green-400/20"; // Treat suggest as apply visually if it persists
             default: return "text-muted-foreground hover:text-foreground border-transparent";
         }
     };
@@ -46,11 +46,13 @@ export default function AIToggleIcon({ feature, icon, label, allowedStates = ["o
                     e.preventDefault();
                     setShowDropdown(!showDropdown);
                 }}
-                className={`glass-button p-1.5 rounded-md flex items-center gap-1 transition-all duration-300 border ${getStatusColor()} group/btn`}
+                className={`glass-button w-8 h-8 flex items-center justify-center rounded-md transition-all duration-300 border relative ${getStatusColor()} group/btn`}
                 title={`${label}: ${state}\nRight-click for models`}
             >
                 {icon}
-                <ChevronDown size={10} className="opacity-0 group-hover/btn:opacity-50" />
+                <div className="absolute -bottom-[2px] -right-[2px] opacity-0 group-hover/btn:opacity-100 transition-opacity">
+                    <ChevronDown size={8} />
+                </div>
             </button>
 
             {showDropdown && (

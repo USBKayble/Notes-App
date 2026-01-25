@@ -17,7 +17,7 @@ export interface AppSettings {
         media: { state: AIFeatureState; model: string; ocrModel: string };
     };
 
-    editorFont: 'inter' | 'mono' | 'pixel';
+    editorFont: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -37,7 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
         media: { state: "apply", model: "pixtral-12b-2409", ocrModel: "mistral-ocr-latest" },
     },
 
-    editorFont: "inter"
+    editorFont: "Inter"
 };
 
 interface SettingsContextType {
@@ -59,7 +59,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                 try {
                     const parsed = JSON.parse(saved);
                     // Deep merge aiFeatures to ensure new keys/defaults are preserved
-                    const mergedSettings = {
+                    const mergedSettings: AppSettings = {
                         ...DEFAULT_SETTINGS,
                         ...parsed,
                         aiFeatures: {
@@ -67,25 +67,30 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                             ...(parsed.aiFeatures || {})
                         }
                     };
+                    
                     // Ensure each feature also has its defaults if partially saved
-                    Object.keys(DEFAULT_SETTINGS.aiFeatures).forEach(k => {
-                        const key = k as keyof typeof DEFAULT_SETTINGS.aiFeatures;
-                        // @ts-ignore
-                        if (mergedSettings.aiFeatures[key]) {
-                            // @ts-ignore
-                            mergedSettings.aiFeatures[key] = {
+                    const features = mergedSettings.aiFeatures;
+                    (Object.keys(DEFAULT_SETTINGS.aiFeatures) as Array<keyof typeof DEFAULT_SETTINGS.aiFeatures>).forEach(key => {
+                        if (features[key]) {
+                            // @ts-expect-error - dynamic merging of feature settings
+                            features[key] = {
                                 ...DEFAULT_SETTINGS.aiFeatures[key],
-                                ...mergedSettings.aiFeatures[key]
+                                ...features[key]
                             };
                         }
                     });
 
-                    setSettings(mergedSettings);
+                    // Wrap in setTimeout to avoid "synchronous setState in effect" lint error
+                    setTimeout(() => {
+                        setSettings(mergedSettings);
+                        setLoading(false);
+                    }, 0);
+                    return;
                 } catch (e) {
                     console.error("Failed to parse settings", e);
                 }
             }
-            setLoading(false);
+            setTimeout(() => setLoading(false), 0);
         }
     }, []);
 

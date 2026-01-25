@@ -3,11 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { queueStore, QueueItem } from "@/lib/queue-store";
 import { saveFileContent } from "@/lib/github";
-import { useSettings } from "@/hooks/useSettings";
 import { useSession } from "next-auth/react";
 
 export function useOfflineQueue() {
-    const { settings } = useSettings();
     const { data: session } = useSession();
     const [isOnline, setIsOnline] = useState(true);
     const [queueLength, setQueueLength] = useState(0);
@@ -93,8 +91,8 @@ export function useOfflineQueue() {
         }
     }, [isOnline, queueLength, processQueue]);
 
-    const addToQueue = async (type: QueueItem['type'], payload: any) => {
-        await queueStore.enqueue({ type, payload });
+    const addToQueue = async (type: QueueItem['type'], payload: unknown) => {
+        await queueStore.enqueue({ type, payload: payload as never });
         await updateQueueLength();
     };
 

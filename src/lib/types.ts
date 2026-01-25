@@ -3,7 +3,7 @@ export interface NoteMetadata {
     tags?: string[];
     created_at?: string;
     updated_at?: string;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface Note {

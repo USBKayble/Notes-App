@@ -134,7 +134,8 @@ export function useAudioRecorder(onChunk: (blob: Blob) => void) {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
 
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            // @ts-expect-error - webkitAudioContext for Safari
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
             const ctx = new AudioContextClass();
             audioContext.current = ctx;
             const source = ctx.createMediaStreamSource(stream);

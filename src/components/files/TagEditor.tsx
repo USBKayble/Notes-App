@@ -5,7 +5,6 @@ import { useSettings } from "@/hooks/useSettings";
 import { useSession } from "next-auth/react";
 import { getNote, saveNote } from "@/lib/github";
 import { Tag, Loader2, X, Save } from "lucide-react";
-import matter from "gray-matter";
 
 interface TagEditorProps {
     path: string;
@@ -20,17 +19,17 @@ export default function TagEditor({ path, onClose }: TagEditorProps) {
     const [tags, setTags] = useState("");
     const [title, setTitle] = useState("");
     const [noteContent, setNoteContent] = useState("");
-    const [metadata, setMetadata] = useState<any>({});
+    const [metadata, setMetadata] = useState<Record<string, unknown>>({});
 
     useEffect(() => {
         const load = async () => {
-            const token = (session as any)?.accessToken;
+            const token = (session as unknown as { accessToken?: string })?.accessToken;
             if (!token || !settings.githubRepo) return;
             const [owner, repo] = settings.githubRepo.split("/");
 
             const note = await getNote(token, owner, repo, path);
             if (note) {
-                setMetadata(note.metadata);
+                setMetadata(note.metadata as Record<string, unknown>);
                 setNoteContent(note.content);
                 setTitle(note.metadata.title || "");
                 const t = note.metadata.tags;
@@ -42,7 +41,7 @@ export default function TagEditor({ path, onClose }: TagEditorProps) {
     }, [path, settings.githubRepo, session]);
 
     const handleSave = async () => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!token || !settings.githubRepo) return;
         setSaving(true);
         const [owner, repo] = settings.githubRepo.split("/");

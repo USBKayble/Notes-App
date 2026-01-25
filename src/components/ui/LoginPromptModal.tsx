@@ -3,9 +3,11 @@
 import React from "react";
 import { signIn, useSession } from "next-auth/react";
 import { Github, HardDrive } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoginPromptModal() {
     const { data: session, status } = useSession();
+    const [showWhySignIn, setShowWhySignIn] = React.useState(false);
 
     // Don't show if loading or if session exists
     if (status === "loading" || session) return null;
@@ -22,6 +24,44 @@ export default function LoginPromptModal() {
                     <p className="text-sm text-gray-400">
                         Please sign in with GitHub to access your notes and sync changes.
                     </p>
+
+                    <button
+                        onClick={() => setShowWhySignIn(!showWhySignIn)}
+                        className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors focus:outline-none focus:underline"
+                    >
+                        Why sign in?
+                    </button>
+
+                    <AnimatePresence>
+                        {showWhySignIn && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{
+                                    type: "spring",
+                                    stiffness: 300,
+                                    damping: 20
+                                }}
+                                className="overflow-hidden"
+                            >
+                                <div className="mt-2 p-3 bg-white/5 rounded-lg border border-white/10 text-left">
+                                    <motion.p
+                                        initial={{ backgroundPosition: "150% 0%" }}
+                                        animate={{ backgroundPosition: "0% 0%" }}
+                                        transition={{
+                                            type: "spring",
+                                            stiffness: 300,
+                                            damping: 20
+                                        }}
+                                        className="text-xs font-medium leading-relaxed bg-gradient-to-r from-gray-400 via-gray-100 to-gray-400 bg-[length:200%_auto] bg-clip-text text-transparent"
+                                    >
+                                        We use GitHub to safely store your notes in the cloud. This ensures your data isn&apos;t lost and syncs across devices.
+                                    </motion.p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
                 <button

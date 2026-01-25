@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Folder, FileText, RefreshCw, ChevronLeft, Plus, X, GitBranch, Image as ImageIcon, MoreVertical, Edit2, Trash2, Tag } from "lucide-react";
+import { Folder, FileText, RefreshCw, ChevronLeft, Plus, X, GitBranch, Image as ImageIcon, MoreVertical, Trash2, Tag } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { useSession } from "next-auth/react";
 import { listRepoFiles, FileItem, listUserRepos, createRepo, RepoItem, saveFileContent, createFolder, renameFile, getNote, saveNote, deleteFile } from "@/lib/github";
@@ -39,14 +39,14 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     const [menuOpenPath, setMenuOpenPath] = useState<string | null>(null);
 
     useEffect(() => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (token) {
             listUserRepos(token).then(setRepos);
         }
     }, [session]);
 
     const handleCreateRepo = async () => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!newRepoName.trim() || !token) return;
         setCreating(true);
         const newRepo = await createRepo(token, newRepoName);
@@ -62,7 +62,7 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     };
 
     const handleCreateFile = async () => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!newFileName.trim() || !token || !settings.githubRepo) return;
         setCreatingFile(true);
         const [owner, repo] = settings.githubRepo.split("/");
@@ -89,7 +89,7 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     };
 
     const handleCreateFolder = async () => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!newFolderName.trim() || !token || !settings.githubRepo) return;
         setCreatingFolder(true);
         const [owner, repo] = settings.githubRepo.split("/");
@@ -108,7 +108,7 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     };
 
     const handleRename = async () => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!renameValue.trim() || !renamingPath || !token || !settings.githubRepo) return;
 
         try {
@@ -151,7 +151,7 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     };
 
     const handleDelete = async (path: string) => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!token || !settings.githubRepo || !confirm("Are you sure you want to delete this note?")) return;
 
         try {
@@ -165,7 +165,7 @@ export default function FileExplorer({ onSelectFile, className = "" }: FileExplo
     };
 
     const loadFiles = React.useCallback(async (path: string) => {
-        const token = (session as any)?.accessToken;
+        const token = (session as unknown as { accessToken?: string })?.accessToken;
         if (!token || !settings.githubRepo) {
             setError("Sign in with GitHub to view files.");
             return;

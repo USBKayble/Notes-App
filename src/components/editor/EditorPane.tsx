@@ -1,18 +1,13 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
-// import Editor, { OnMount, DiffEditor, DiffOnMount } from "@monaco-editor/react"; // REMOVING Monaco
+import React, { useRef, useCallback, useMemo } from "react";
 import { useSettings } from "@/hooks/useSettings";
-import { useSession } from "next-auth/react";
 import { Loader2 } from "lucide-react";
 import matter from "gray-matter";
-import { uploadAsset } from "@/lib/github";
 import dynamic from "next/dynamic";
-import type { MDXEditorMethods } from '@mdxeditor/editor';
 
-// Dynamically import the editor to avoid SSR issues
-const InitializedMDXEditor = dynamic(
-    () => import('./InitializedMDXEditor'),
+const MilkdownEditor = dynamic(
+    () => import('./MilkdownEditor'),
     {
         ssr: false,
         loading: () => <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -21,77 +16,84 @@ const InitializedMDXEditor = dynamic(
 
 interface EditorPaneProps {
     value: string;
-    originalValue?: string;
     onChange: (value: string | undefined) => void;
-    language?: string;
+    onFilePaste?: (file: File) => void;
     currentFilePath?: string | null;
 }
 
-export default function EditorPane({ value, originalValue, onChange, language = "markdown", currentFilePath }: EditorPaneProps) {
+export default function EditorPane({ value, onChange, onFilePaste }: EditorPaneProps) {
     const { settings } = useSettings();
-    const { data: session } = useSession();
-    const editorRef = useRef<MDXEditorMethods>(null);
-    const [metadata, setMetadata] = useState<any>({});
-    const [body, setBody] = useState("");
-    const [isInternalUpdate, setIsInternalUpdate] = useState(false);
+    const isInternalUpdate = useRef(false);
+    
+    const onChangeRef = useRef(onChange);
+    React.useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-    // Parse incoming value into Metadata + Body
-    useEffect(() => {
-        if (isInternalUpdate) return;
+    // Helper to transform paths for display
+    const transformForDisplay = useCallback((text: string) => {
+        if (!settings.githubRepo) return text;
+        const [owner, repo] = settings.githubRepo.split("/");
+        // Match ![alt](media/path) or [link](media/path) or assets/media/path
+        // regex: (\!?\[.*?\]\()((?:assets\/)?media\/.*?)(?=\))
+        return text.replace(/(!?[\[\]].*?\]\()((?:assets\/)?media\/.*?)(?=\))/g, (match, p1, p2) => {
+            return `${p1}/api/proxy-media?owner=${owner}&repo=${repo}&path=${p2}`;
+        });
+    }, [settings.githubRepo]);
+
+    // Helper to transform paths for storage
+    const transformForStorage = useCallback((text: string) => {
+        // regex: (\!?\[.*?\]\()(\/api\/proxy-media\?.*?path=)((?:assets\/)?media\/.*?)(?:&.*?)?(\))
+        return text.replace(/(!?[\[\]].*?\]\()\/api\/proxy-media\?.*?path=((?:assets\/)?media\/.*?)(?:&.*?)?(\))/g, (match, p1, p2, p3) => {
+            return `${p1}${p2}${p3}`;
+        });
+    }, []);
+
+    const { body, rawFrontmatter } = useMemo(() => {
         try {
-            const { data, content } = matter(value);
-            setMetadata(data);
-            // If body didn't change (only metadata), we don't want to force re-render if not needed.
-            // But here we setBody which presumably updates the editor.
-            setBody(content);
-        } catch (e) {
-            setBody(value);
+            const parsed = matter(value);
+            const frontmatter = (value.startsWith('---') && (parsed as any).matter) ? (parsed as any).matter : null;
+            return {
+                body: transformForDisplay(parsed.content),
+                rawFrontmatter: frontmatter
+            };
+        } catch {
+            return {
+                body: transformForDisplay(value),
+                rawFrontmatter: null
+            };
         }
-    }, [value, isInternalUpdate]);
-
-    const updateContent = (newMetadata: any, newBody: string) => {
-        setIsInternalUpdate(true);
-        const newContent = matter.stringify(newBody, newMetadata);
-        onChange(newContent);
-        setTimeout(() => setIsInternalUpdate(false), 0);
-    };
-
-
+    }, [value, transformForDisplay]);
 
     const handleChange = (newBody: string) => {
-        setBody(newBody);
-        updateContent(metadata, newBody);
-    };
-
-    const handleImageUpload = async (image: File): Promise<string> => {
-        const token = (session as any)?.accessToken;
-        if (!currentFilePath || !token || !settings.githubRepo) {
-            throw new Error("GitHub not configured or file not selected");
+        if (newBody === body) return;
+        
+        isInternalUpdate.current = true;
+        
+        const bodyForStorage = transformForStorage(newBody);
+        let newContent;
+        if (rawFrontmatter !== null) {
+             newContent = `---${rawFrontmatter}
+---
+${bodyForStorage}`;
+        } else {
+             newContent = bodyForStorage;
         }
 
-        try {
-            const [owner, repo] = settings.githubRepo.split("/");
-            const timestamp = Date.now();
-            // Replace spaces with dashes
-            const assetPath = `assets/${timestamp}-${image.name.replace(/\s+/g, '-')}`;
-
-            await uploadAsset(token, owner, repo, assetPath, image);
-            return `/assets/${timestamp}-${image.name.replace(/\s+/g, '-')}`;
-        } catch (e) {
-            console.error("Image upload failed", e);
-            throw e;
+        if (newContent !== value) {
+            onChangeRef.current(newContent);
         }
+        
+        // Use a microtask to reset the flag after the parent has likely finished its update cycle
+        Promise.resolve().then(() => {
+            isInternalUpdate.current = false;
+        });
     };
 
     return (
-        <div className="h-full w-full overflow-hidden bg-transparent flex flex-col">
-
-
-            <InitializedMDXEditor
-                editorRef={editorRef}
+        <div className="min-h-full w-full bg-transparent flex flex-col">
+            <MilkdownEditor
                 value={body}
                 onChange={handleChange}
-                imageUploadHandler={handleImageUpload}
+                onFilePaste={onFilePaste}
             />
         </div>
     );

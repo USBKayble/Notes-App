@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Roboto_Mono, Pixelify_Sans } from "next/font/google";
 import "./globals.css";
 import { SettingsProvider } from "@/hooks/useSettings";
+import { FontLoader } from "@/components/ui/FontLoader";
 import AuthSessionProvider from "@/components/layout/SessionProvider";
 
 const outfit = Outfit({
@@ -33,6 +34,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${outfit.variable} ${robotoMono.variable} ${pixelifySans.variable} font-sans bg-background text-foreground antialiased selection:bg-primary/30 selection:text-white`}>
         <SettingsProvider>
+          <FontLoader />
           <AuthSessionProvider>
             <main className="min-h-screen relative overflow-hidden">
               {/* Ambient Background Effects */}
