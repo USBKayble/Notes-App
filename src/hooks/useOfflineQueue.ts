@@ -103,7 +103,7 @@ export function useOfflineQueue() {
             setIsProcessing(false);
             updateQueueLength();
         }
-    }, [isOnline, isProcessing, session, updateQueueLength]);
+    }, [isOnline, isProcessing, session, updateQueueLength, settings?.aiFeatures?.transcription?.model, settings?.githubRepo]);
 
     // Auto-process when coming online
     useEffect(() => {
