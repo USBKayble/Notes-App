@@ -30,7 +30,7 @@ describe('chatWithMistral', () => {
 
     mockSettings = {
       selectedModel: 'mistral-large-latest',
-      aiFeatures: {} as any
+      aiFeatures: {} as unknown
     } as unknown as AppSettings;
 
     onChunkMock = vi.fn();
