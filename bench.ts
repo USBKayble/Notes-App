@@ -1,6 +1,7 @@
 import { performance } from "perf_hooks";
 
 const mockQueueStore = {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     remove: async (id: string) => {
         return new Promise<void>(resolve => setTimeout(resolve, 10)); // simulate 10ms I/O
     }
