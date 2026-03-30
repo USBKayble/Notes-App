@@ -1,9 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fetchMistralModels } from '../mistral';
+import { fetchMistralModels, synthesizeNote } from '../mistral';
+import { AppSettings } from '@/hooks/useSettings';
 
 // Mock the config so we can test the fallback without API key
 vi.mock('../config', () => ({
   config: { mistralApiKey: '' }
+}));
+
+const { mockList, mockComplete } = vi.hoisted(() => ({
+  mockList: vi.fn().mockRejectedValue(new Error('Network error')),
+  mockComplete: vi.fn()
 }));
 
 // Mock the Mistral module correctly
@@ -11,7 +17,10 @@ vi.mock('@mistralai/mistralai', () => {
   return {
     Mistral: class {
       models = {
-        list: vi.fn().mockRejectedValue(new Error('Network error'))
+        list: mockList
+      };
+      chat = {
+        complete: mockComplete
       };
       constructor() {}
     }
@@ -66,5 +75,58 @@ describe('fetchMistralModels fallback list', () => {
   it('should return an empty array if no API key is provided and config lacks one', async () => {
     const models = await fetchMistralModels();
     expect(models).toEqual([]);
+  });
+});
+
+describe('synthesizeNote', () => {
+  const mockSettings = {
+    selectedModel: "mistral-large-latest"
+  } as AppSettings;
+
+  it('should return the integrated content when API succeeds', async () => {
+    // We need to provide a dummy api key to getMistralClient so it returns a client
+    const { config } = await import('../config');
+    config.mistralApiKey = 'dummy';
+
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: 'Integrated Note' } }]
+    });
+
+    const result = await synthesizeNote('Current Note', 'New Context', 'reff.jpg', mockSettings);
+    expect(result).toBe('Integrated Note');
+    expect(mockComplete).toHaveBeenCalledWith({
+      model: "mistral-large-latest",
+      messages: [
+        {
+          role: "system",
+          content: expect.stringContaining("Integrate 'New Information' into 'Existing Note'.")
+        },
+        {
+          role: "user",
+          content: "Existing Note:\nCurrent Note\n\nNew Information:\nNew Context"
+        }
+      ]
+    });
+  });
+
+  it('should return fallback string when API returns non-string content', async () => {
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: null } }]
+    });
+
+    const result = await synthesizeNote('Current Note', 'New Context', 'reff.jpg', mockSettings);
+    expect(result).toBe('Current Note\n\nNew Context');
+  });
+
+  it('should catch error, log it, and return fallback string when API fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('API Error');
+    mockComplete.mockRejectedValueOnce(error);
+
+    const result = await synthesizeNote('Current Note', 'New Context', 'reff.jpg', mockSettings);
+    expect(result).toBe('Current Note\n\nNew Context [Reff: reff.jpg]');
+    expect(consoleSpy).toHaveBeenCalledWith("Synthesis failed", error);
+
+    consoleSpy.mockRestore();
   });
 });
