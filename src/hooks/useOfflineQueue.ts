@@ -48,43 +48,67 @@ export function useOfflineQueue() {
         try {
             setIsProcessing(true);
             const items = await queueStore.getPendingItems();
-            const removePromises: Promise<void>[] = [];
+
+            // Group items to process independent tasks concurrently
+            // while preserving sequential order for the same resource
+            const groups: Record<string, QueueItem[]> = {};
 
             for (const item of items) {
-                if (!navigator.onLine) break; // Stop if we go offline mid-process
+                let groupKey = item.id; // Default to independent
 
-                await queueStore.updateStatus(item.id, 'PROCESSING');
-
-                try {
-                    switch (item.type) {
-                        case 'FILE_SAVE': {
-                            const { owner, repo, path, content, sha } = item.payload;
-                            if (token) {
-                                await saveFileContent(token, owner, repo, path, content, sha);
-                            }
-                            break;
-                        }
-                        case 'AI_JOB': {
-                            console.log("Processing AI Job:", item.payload);
-                            // TODO: Implement AI pipeline execution here
-                            // For now we just simulate success or implement basic transcription if needed
-                            // based on sub-type
-                            break;
-                        }
-                    }
-                    removePromises.push(
-                        queueStore.remove(item.id).catch(error => {
-                            console.error(`Failed to remove item ${item.id}`, error);
-                        })
-                    );
-                } catch (error) {
-                    console.error(`Failed to process item ${item.id}`, error);
-                    // For now, mark as failed. In future, implement retry with backoff.
-                    await queueStore.updateStatus(item.id, 'FAILED');
+                if (item.type === 'FILE_SAVE') {
+                    const { owner, repo, path } = item.payload;
+                    groupKey = `FILE_SAVE:${owner}/${repo}/${path}`;
                 }
+
+                if (!groups[groupKey]) {
+                    groups[groupKey] = [];
+                }
+                groups[groupKey].push(item);
             }
 
-            await Promise.all(removePromises);
+            const processGroup = async (groupItems: QueueItem[]) => {
+                for (const item of groupItems) {
+                    if (!navigator.onLine) break; // Stop if we go offline mid-process
+
+                    await queueStore.updateStatus(item.id, 'PROCESSING');
+
+                    try {
+                        switch (item.type) {
+                            case 'FILE_SAVE': {
+                                const { owner, repo, path, content, sha } = item.payload;
+                                if (token) {
+                                    await saveFileContent(token, owner, repo, path, content, sha);
+                                }
+                                break;
+                            }
+                            case 'AI_JOB': {
+                                console.log("Processing AI Job:", item.payload);
+                                // TODO: Implement AI pipeline execution here
+                                break;
+                            }
+                        }
+
+                        // Remove item on success
+                        await queueStore.remove(item.id).catch(error => {
+                            console.error(`Failed to remove item ${item.id}`, error);
+                        });
+
+                    } catch (error) {
+                        console.error(`Failed to process item ${item.id}`, error);
+                        // For now, mark as failed.
+                        await queueStore.updateStatus(item.id, 'FAILED');
+
+                        // Break out of the group processing to avoid out-of-order execution
+                        // for subsequent items targeting the same resource
+                        break;
+                    }
+                }
+            };
+
+            // Process all groups concurrently
+            await Promise.all(Object.values(groups).map(processGroup));
+
         } finally {
             setIsProcessing(false);
             updateQueueLength();
