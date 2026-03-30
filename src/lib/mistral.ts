@@ -256,7 +256,7 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
         let summary = typeof res.choices?.[0].message.content === 'string' ? res.choices[0].message.content : "";
 
         // Clean up if the model wraps in code blocks despite instructions
-        summary = summary.replace(/^```markdown\s*/, '').replace(/^```\s*/, '').replace(/```$/, '');
+        summary = summary.replace(/^```markdown\s*/, '').replace(/^```\s*/, '').replace(/\n```$/, '').replace(/```$/, '');
 
         // If model didn't add the header, add it manually
         if (!summary.includes("[!SUMM]")) {
@@ -273,7 +273,6 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
  * 5. Synthesis
  */
 export const synthesizeNote = async (currentNote: string, newContext: string, mediaReff: string, settings: AppSettings): Promise<string> => {
-    // const { mistralApiKey } = settings; // Removed
     const client = getMistralClient();
     if (!client) return currentNote + "\n\n" + newContext;
 
@@ -430,6 +429,7 @@ export const chatWithMistral = async (
 
             if (delta?.toolCalls) {
                 // Accumulate tool calls
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 delta.toolCalls.forEach((tc: any) => {
                     const index = tc.index;
                     if (!toolCallAccumulator[index]) {

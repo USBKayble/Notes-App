@@ -50,6 +50,7 @@ export default function EditorPane({ value, onChange, onFilePaste }: EditorPaneP
     const { body, rawFrontmatter } = useMemo(() => {
         try {
             const parsed = matter(value);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const frontmatter = (value.startsWith('---') && (parsed as any).matter) ? (parsed as any).matter : null;
             return {
                 body: transformForDisplay(parsed.content),
