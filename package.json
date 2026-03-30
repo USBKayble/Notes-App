@@ -19,7 +19,7 @@
     "@milkdown/preset-gfm": "^7.18.0",
     "@milkdown/react": "^7.18.0",
     "@milkdown/theme-nord": "^7.18.0",
-    "@mistralai/mistralai": "^1.13.0",
+    "@mistralai/mistralai": "^1.15.1",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/diff": "^7.0.2",
