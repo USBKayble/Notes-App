@@ -220,7 +220,6 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
  * 5. Synthesis
  */
 export const synthesizeNote = async (currentNote: string, newContext: string, mediaReff: string, settings: AppSettings): Promise<string> => {
-    // const { mistralApiKey } = settings; // Removed
     const client = getMistralClient();
     if (!client) return currentNote + "\n\n" + newContext;
 
