@@ -203,7 +203,7 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
         let summary = typeof res.choices?.[0].message.content === 'string' ? res.choices[0].message.content : "";
 
         // Clean up if the model wraps in code blocks despite instructions
-        summary = summary.replace(/^```markdown\s*/, '').replace(/^```\s*/, '').replace(/```$/, '');
+        summary = summary.replace(/^```markdown\s*/, '').replace(/^```\s*/, '').replace(/\n```$/, '').replace(/```$/, '');
 
         // If model didn't add the header, add it manually
         if (!summary.includes("[!SUMM]")) {
