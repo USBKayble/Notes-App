@@ -54,10 +54,6 @@ jobs:
       - name: Audit dependencies for vulnerabilities
         run: npm audit --audit-level=high
 
-      - name: Dependency review (PRs only)
-        if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
-
   auto-merge:
     if: >-
       github.event_name == 'pull_request' &&
