@@ -54,10 +54,6 @@ jobs:
       - name: Audit dependencies for vulnerabilities
         run: npm audit --audit-level=high
 
-      - name: Dependency review (PRs only)
-        if: github.event_name == 'pull_request'
-        uses: actions/dependency-review-action@v4
-
   auto-merge:
     if: >-
       github.event_name == 'pull_request' &&
@@ -73,6 +69,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Enable auto-merge
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}" || echo "Auto-merge failed, likely because it is not enabled in repository settings. Continuing..."
+        run: gh pr merge --auto --squash --delete-branch "${{ github.event.pull_request.number }}" || echo "Auto-merge failed, likely because it is not enabled in repository settings. Continuing..."

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchMistralModels, synthesizeNote, transcribeAndCleanup } from '../mistral';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
 // Mock the config so we can test the fallback without API key
@@ -7,9 +7,10 @@ vi.mock('../config', () => ({
   config: { mistralApiKey: '' }
 }));
 
-const { mockList, mockComplete, mockAudioComplete } = vi.hoisted(() => ({
+const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
   mockList: vi.fn().mockRejectedValue(new Error('Network error')),
   mockComplete: vi.fn(),
+  mockProcess: vi.fn(),
   mockAudioComplete: vi.fn()
 }));
 
@@ -19,6 +20,9 @@ vi.mock('@mistralai/mistralai', () => {
     Mistral: class {
       models = {
         list: mockList
+      };
+      ocr = {
+        process: mockProcess
       };
       chat = {
         complete: mockComplete
@@ -236,6 +240,115 @@ describe('synthesizeNote', () => {
     const result = await synthesizeNote('Current Note', 'New Context', 'reff.jpg', mockSettings);
     expect(result).toBe('Current Note\n\nNew Context [Reff: reff.jpg]');
     expect(consoleSpy).toHaveBeenCalledWith("Synthesis failed", error);
+
+    consoleSpy.mockRestore();
+  });
+});
+
+describe('mediaUnderstanding', () => {
+  const mockSettings = {
+    aiFeatures: {
+      media: {
+        model: 'pixtral-12b-2409',
+        ocrModel: 'mistral-ocr-latest'
+      }
+    }
+  } as AppSettings;
+
+  let originalCreateObjectURL: typeof URL.createObjectURL;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Provide a dummy API key so getMistralClient returns a client
+    const { config } = await import('../config');
+    config.mistralApiKey = 'dummy';
+
+    originalCreateObjectURL = global.URL.createObjectURL;
+  });
+
+  afterEach(async () => {
+    global.URL.createObjectURL = originalCreateObjectURL;
+    const { config } = await import('../config');
+    config.mistralApiKey = '';
+  });
+
+  it('should return null if file is not an image', async () => {
+    const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+    const result = await mediaUnderstanding(file, mockSettings);
+    expect(result).toBeNull();
+  });
+
+  it('should process image and return MediaUnderstandingResult', async () => {
+    const file = new File(['image content'], 'test.png', { type: 'image/png' });
+
+    // Mock URL.createObjectURL
+    global.URL.createObjectURL = vi.fn(() => 'blob:dummy-url');
+
+    mockProcess.mockResolvedValueOnce({
+      pages: [{ markdown: 'OCR text line 1' }, { markdown: 'OCR text line 2' }]
+    });
+
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: 'This is an image description.' } }]
+    });
+
+    const result = await mediaUnderstanding(file, mockSettings);
+
+    expect(mockProcess).toHaveBeenCalledWith({
+      model: 'mistral-ocr-latest',
+      document: {
+        type: 'image_url',
+        imageUrl: 'blob:dummy-url'
+      }
+    });
+
+    expect(mockComplete).toHaveBeenCalledWith({
+      model: 'pixtral-12b-2409',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Analyze this image. Summarize documents or describe scenes/subjects. Output ONLY clean Markdown (Headers, Bullets). No code blocks.' },
+            { type: 'image_url', imageUrl: 'blob:dummy-url' }
+          ]
+        }
+      ]
+    });
+
+    expect(result).toEqual({
+      description: 'This is an image description.',
+      ocrMarkdown: 'OCR text line 1\nOCR text line 2',
+      combined: '### Media Analysis\nThis is an image description.\n\n### OCR Result\nOCR text line 1\nOCR text line 2'
+    });
+  });
+
+  it('should return description without ocrMarkdown if ocr returns no pages', async () => {
+    const file = new File(['image content'], 'test.png', { type: 'image/png' });
+    global.URL.createObjectURL = vi.fn(() => 'blob:dummy-url');
+
+    mockProcess.mockResolvedValueOnce({ pages: [] });
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: 'No OCR.' } }]
+    });
+
+    const result = await mediaUnderstanding(file, mockSettings);
+
+    expect(result?.ocrMarkdown).toBe('');
+    expect(result?.combined).toContain('### OCR Result\n');
+  });
+
+  it('should handle API errors gracefully, log error and return null', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const file = new File(['image content'], 'test.png', { type: 'image/png' });
+    global.URL.createObjectURL = vi.fn(() => 'blob:dummy-url');
+
+    const error = new Error('API processing error');
+    mockProcess.mockRejectedValueOnce(error);
+
+    const result = await mediaUnderstanding(file, mockSettings);
+
+    expect(consoleSpy).toHaveBeenCalledWith('Media processing failed', error);
+    expect(result).toBeNull();
 
     consoleSpy.mockRestore();
   });
