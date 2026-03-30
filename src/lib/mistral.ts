@@ -58,6 +58,61 @@ export const fetchMistralModels = async (apiKey?: string) => {
 // ------------------------------------------------------------------
 
 /**
+ * TTS: Text to Speech
+ */
+export const textToSpeech = async (text: string, settings: AppSettings): Promise<string | null> => {
+    const client = getMistralClient(settings.mistralApiKey);
+    if (!client) return null;
+
+    // Safely check for TTS settings for backward compatibility
+    const ttsSettings = settings.aiFeatures?.tts;
+
+    try {
+        // Since @mistralai/mistralai@1.13.0 doesn't have client.audio.speech natively, we use fetch
+        const apiKey = settings.mistralApiKey;
+        if (!apiKey) return null;
+
+        const response = await fetch("https://api.mistral.ai/v1/audio/speech", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: ttsSettings?.model || "voxtral-mini-latest",
+                input: text,
+                voice: ttsSettings?.voiceId || "en-US",
+                response_format: "mp3"
+            })
+        });
+
+        if (!response.ok) {
+            console.error("TTS request failed:", response.status, response.statusText);
+            return null;
+        }
+
+        const json = await response.json();
+
+        if (json && typeof json.audio_data === 'string') {
+            // The audioData is a base64 encoded string
+            const byteCharacters = atob(json.audio_data);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: "audio/mp3" });
+            return URL.createObjectURL(blob);
+        }
+
+        return null;
+    } catch (e) {
+        console.error("TTS failed", e);
+        return null;
+    }
+};
+
+/**
  * Simple Transcription + Cleanup for Chat
  */
 export const transcribeAndCleanup = async (audioBlob: Blob, apiKey?: string, model: string = "mistral-small-latest") => {

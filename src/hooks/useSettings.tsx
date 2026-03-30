@@ -16,6 +16,7 @@ export interface AppSettings {
         organization: { state: AIFeatureState; model: string };
         summarization: { state: AIFeatureState; model: string };
         media: { state: AIFeatureState; model: string; ocrModel: string };
+        tts: { state: AIFeatureState; model: string; voiceId: string };
     };
 
     editorFont: string;
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: AppSettings = {
         organization: { state: "off", model: "mistral-small-latest" },
         summarization: { state: "suggest", model: "mistral-large-latest" },
         media: { state: "apply", model: "pixtral-12b-2409", ocrModel: "mistral-ocr-latest" },
+        tts: { state: "off", model: "voxtral-mini-latest", voiceId: "en-US" },
     },
 
     editorFont: "Inter"

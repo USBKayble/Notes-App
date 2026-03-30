@@ -4,6 +4,18 @@ import { AppSettings } from '../../hooks/useSettings';
 
 const mockComplete = vi.fn();
 
+// Mock the Mistral client
+vi.mock('@mistralai/mistralai', () => {
+  return {
+    Mistral: class {
+      chat = {
+        complete: mockComplete
+      };
+      constructor() {}
+    }
+  };
+});
+
 describe('summarizeHighlight', () => {
   let mockSettings: AppSettings;
 
