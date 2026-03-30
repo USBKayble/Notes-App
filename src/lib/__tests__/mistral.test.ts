@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchMistralModels, synthesizeNote, mediaUnderstanding } from '../mistral';
+import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
 // Mock the config so we can test the fallback without API key
@@ -7,10 +7,11 @@ vi.mock('../config', () => ({
   config: { mistralApiKey: '' }
 }));
 
-const { mockList, mockComplete, mockProcess } = vi.hoisted(() => ({
+const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
   mockList: vi.fn().mockRejectedValue(new Error('Network error')),
   mockComplete: vi.fn(),
-  mockProcess: vi.fn()
+  mockProcess: vi.fn(),
+  mockAudioComplete: vi.fn()
 }));
 
 // Mock the Mistral module correctly
@@ -26,9 +27,97 @@ vi.mock('@mistralai/mistralai', () => {
       chat = {
         complete: mockComplete
       };
+      audio = {
+        transcriptions: {
+          complete: mockAudioComplete
+        }
+      };
       constructor() {}
     }
   };
+});
+
+describe('transcribeAndCleanup', () => {
+  const dummyBlob = new Blob(['dummy audio content'], { type: 'audio/webm' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should throw an error if API Key is missing', async () => {
+    await expect(transcribeAndCleanup(dummyBlob, undefined)).rejects.toThrow('API Key missing');
+  });
+
+  it('should return an empty string and log an error if transcription fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('Transcription API error');
+    mockAudioComplete.mockRejectedValueOnce(error);
+
+    const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
+
+    expect(result).toBe('');
+    expect(consoleSpy).toHaveBeenCalledWith('Transcription failed', error);
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should return the raw transcription and log an error if cleanup fails', async () => {
+    mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('Cleanup API error');
+    mockComplete.mockRejectedValueOnce(error);
+
+    const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
+
+    expect(result).toBe('Raw transcription text');
+    expect(consoleSpy).toHaveBeenCalledWith('Cleanup failed', error);
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should return the cleaned up text on full success', async () => {
+    mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: 'Cleaned transcription text' } }]
+    });
+
+    const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
+
+    expect(result).toBe('Cleaned transcription text');
+    expect(mockAudioComplete).toHaveBeenCalledWith({
+      file: dummyBlob as File,
+      model: 'mistral-small-latest'
+    });
+    expect(mockComplete).toHaveBeenCalledWith({
+      model: "mistral-small-latest",
+      messages: [
+        { role: "system", content: "Clean up transcription. Fix punctuation, spelling, remove filler words, and correct phonetic errors. Keep original tone. LaTeX: $ for inline, $$ for block. Output ONLY cleaned text." },
+        { role: "user", content: 'Raw transcription text' }
+      ]
+    });
+  });
+
+  it('should return raw text if cleanup returns non-string content', async () => {
+    mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
+    mockComplete.mockResolvedValueOnce({
+      choices: [{ message: { content: null } }]
+    });
+
+    const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
+
+    expect(result).toBe('Raw transcription text');
+  });
+
+  it('should return empty string if transcription returns empty text', async () => {
+    mockAudioComplete.mockResolvedValueOnce({ text: '' });
+
+    const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
+
+    expect(result).toBe('');
+    // Cleanup should not be called
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
 });
 
 describe('fetchMistralModels fallback list', () => {
