@@ -68,15 +68,18 @@ export function useOfflineQueue() {
                             break;
                         }
                         case 'AI_JOB': {
-                            if (item.payload.jobType === 'TRANSCRIBE_AND_CLEANUP' && item.payload.audioBlob) {
-                                const text = await transcribeAndCleanup(item.payload.audioBlob);
-                                if (text && item.payload.targetPath && token) {
-                                    const repoParts = settings.githubRepo.split('/');
-                                    if (repoParts.length === 2) {
-                                        const [owner, repo] = repoParts;
-                                        const existingContent = await getFileContent(token, owner, repo, item.payload.targetPath);
-                                        const newContent = existingContent + (existingContent.endsWith('\n') || existingContent === "" ? "" : "\n\n") + text;
-                                        await saveFileContent(token, owner, repo, item.payload.targetPath, newContent);
+                            console.log("Processing AI Job:", item.payload);
+                            const { jobType, audioBlob, targetPath } = item.payload;
+
+                            if (jobType === 'TRANSCRIBE_AND_CLEANUP' && audioBlob) {
+                                const text = await transcribeAndCleanup(audioBlob, undefined, settings?.aiFeatures?.transcription?.model);
+
+                                if (text && targetPath && settings?.githubRepo && token) {
+                                    const [owner, repo] = settings.githubRepo.split('/');
+                                    if (owner && repo) {
+                                        const currentContent = await getFileContent(token, owner, repo, targetPath);
+                                        const newContent = currentContent ? `${currentContent}\n\n${text}` : text;
+                                        await saveFileContent(token, owner, repo, targetPath, newContent);
                                     }
                                 }
                             }
@@ -100,7 +103,7 @@ export function useOfflineQueue() {
             setIsProcessing(false);
             updateQueueLength();
         }
-    }, [isOnline, isProcessing, session, updateQueueLength, settings.githubRepo]);
+    }, [isOnline, isProcessing, session, updateQueueLength, settings?.aiFeatures?.transcription?.model, settings?.githubRepo]);
 
     // Auto-process when coming online
     useEffect(() => {
