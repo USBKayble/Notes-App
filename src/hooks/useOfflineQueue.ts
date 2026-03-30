@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { queueStore, QueueItem } from "@/lib/queue-store";
-import { saveFileContent } from "@/lib/github";
+import { saveFileContent, getFileContent } from "@/lib/github";
 import { useSession } from "next-auth/react";
+import { useSettings } from "@/hooks/useSettings";
+import { transcribeAndCleanup } from "@/lib/mistral";
 
 export function useOfflineQueue() {
     const { data: session } = useSession();
+    const { settings } = useSettings();
     const [isOnline, setIsOnline] = useState(true);
     const [queueLength, setQueueLength] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -56,9 +59,11 @@ export function useOfflineQueue() {
             for (const item of items) {
                 let groupKey = item.id; // Default to independent
 
+
                 if (item.type === 'FILE_SAVE') {
                     const { owner, repo, path } = item.payload;
                     groupKey = `FILE_SAVE:${owner}/${repo}/${path}`;
+
                 }
 
                 if (!groups[groupKey]) {
@@ -83,8 +88,18 @@ export function useOfflineQueue() {
                                 break;
                             }
                             case 'AI_JOB': {
-                                console.log("Processing AI Job:", item.payload);
-                                // TODO: Implement AI pipeline execution here
+                                if (item.payload.jobType === 'TRANSCRIBE_AND_CLEANUP' && item.payload.audioBlob) {
+                                    const text = await transcribeAndCleanup(item.payload.audioBlob);
+                                    if (text && item.payload.targetPath && token) {
+                                        const repoParts = settings.githubRepo.split('/');
+                                        if (repoParts.length === 2) {
+                                            const [owner, repo] = repoParts;
+                                            const existingContent = await getFileContent(token, owner, repo, item.payload.targetPath);
+                                            const newContent = existingContent + (existingContent.endsWith('\n') || existingContent === "" ? "" : "\n\n") + text;
+                                            await saveFileContent(token, owner, repo, item.payload.targetPath, newContent);
+                                        }
+                                    }
+                                }
                                 break;
                             }
                         }
@@ -113,7 +128,7 @@ export function useOfflineQueue() {
             setIsProcessing(false);
             updateQueueLength();
         }
-    }, [isOnline, isProcessing, session, updateQueueLength]);
+    }, [isOnline, isProcessing, session, updateQueueLength, settings.githubRepo]);
 
     // Auto-process when coming online
     useEffect(() => {
