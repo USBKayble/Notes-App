@@ -28,8 +28,8 @@ export default function AppShell() {
     const { save, saveStatus, saveError, isLocalSave, isAIProcessing } = useSaveManager();
 
     // Sidebar States
-    const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-    const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+    const [leftSidebarOpen, setLeftSidebarOpen] = useState(false);
+    const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [editorContent, setEditorContent] = useState(`# Welcome to Mistral Notes
@@ -66,6 +66,15 @@ $$
     // Track content that was last saved to avoid infinite loops and know when to save
     const [lastSavedContent, setLastSavedContent] = useState<string | null>(null); 
     const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
+
+    // Open sidebars automatically on desktop
+    useEffect(() => {
+        if (typeof window !== "undefined" && window.innerWidth >= 768) {
+            setLeftSidebarOpen(true);
+            setRightSidebarOpen(true);
+        }
+    }, []);
+
 
     // Ref to skip the next auto-save cycle (used after AI updates to prevent loops)
     const skipNextAutoSave = useRef(false);
@@ -255,19 +264,33 @@ $$
             <LoginPromptModal />
 
             {/* Left Sidebar: Files */}
-            <div className={`flex flex-col border-r border-white/5 transition-all duration-300 ease-in-out relative ${leftSidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
+            <div className={`flex flex-col border-r border-white/5 transition-all duration-300 ease-in-out absolute md:relative z-20 md:z-auto bg-background h-full ${leftSidebarOpen ? "w-[80vw] md:w-64" : "w-0 overflow-hidden"}`}>
                 <div className="flex-1 overflow-hidden">
-                    <div className="h-full w-64">
+                    <div className="h-full w-[80vw] md:w-64">
                         <FileExplorer onSelectFile={handleLoadFile} />
                     </div>
                 </div>
             </div>
 
+
+            {/* Mobile Overlay */}
+            {(leftSidebarOpen || rightSidebarOpen) && (
+                <div
+                    className="absolute inset-0 z-10 bg-black/50 md:hidden backdrop-blur-sm"
+                    onClick={() => {
+                        setLeftSidebarOpen(false);
+                        setRightSidebarOpen(false);
+                    }}
+                />
+            )}
+
             {/* Main Content: Editor */}
+
             <div className="flex-1 flex flex-col min-w-0 relative transition-all duration-300 bg-background/50">
                 {/* Toolbar / Header */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 select-none bg-background/80 backdrop-blur-md z-1">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between px-2 sm:px-4 py-2 border-b border-white/5 select-none bg-background/80 backdrop-blur-md z-1 gap-2 sm:gap-0">
+                    <div className="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-3">
+                        <div className="flex items-center gap-3">
                         <button
                             onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
                             className={`hover:text-primary transition-colors ${leftSidebarOpen ? "text-primary" : "text-muted-foreground"}`}
@@ -279,8 +302,8 @@ $$
                         <span className="font-medium text-xs tracking-wider text-muted-foreground uppercase flex items-center gap-2 group-hover:text-foreground transition-colors">
                             Editor
                             {currentFilePath && (
-                                <span className="opacity-50 normal-case font-normal ml-1 text-[10px] bg-white/5 px-1.5 py-0.5 rounded">
-                                    {currentFilePath}
+                                <span className="opacity-50 normal-case font-normal ml-1 text-[10px] bg-white/5 px-1.5 py-0.5 rounded truncate max-w-[120px] sm:max-w-[200px]">
+                                    {currentFilePath.split('/').pop()}
                                 </span>
                             )}
                             {!isOnline && (
@@ -289,9 +312,17 @@ $$
                                 </span>
                             )}
                         </span>
+                        </div>
+
+                        <button
+                            onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
+                            className={`sm:hidden hover:text-primary transition-colors ml-2 ${rightSidebarOpen ? "text-primary" : "text-muted-foreground"}`}
+                        >
+                            <MessageSquare size={16} />
+                        </button>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto justify-start sm:justify-end [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {/* Save Status Indicator */}
                         <div className="flex items-center gap-2 mr-4 border-r border-white/10 pr-4 h-full">
                             {saveStatus === 'saving' ? (
@@ -358,7 +389,7 @@ $$
 
                         <button
                             onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-                            className={`hover:text-primary transition-colors ml-2 ${rightSidebarOpen ? "text-primary" : "text-muted-foreground"}`}
+                            className={`hidden sm:block hover:text-primary transition-colors ml-2 ${rightSidebarOpen ? "text-primary" : "text-muted-foreground"}`}
                         >
                             <MessageSquare size={16} />
                         </button>
@@ -376,9 +407,9 @@ $$
             </div>
 
             {/* Right Sidebar: AI Chat */}
-            <div className={`flex flex-col border-l border-white/5 transition-all duration-300 ease-in-out relative ${rightSidebarOpen ? "w-80" : "w-0 overflow-hidden"}`}>
+            <div className={`flex flex-col border-l border-white/5 transition-all duration-300 ease-in-out absolute right-0 md:relative z-20 md:z-auto bg-background h-full shadow-2xl md:shadow-none ${rightSidebarOpen ? "w-[85vw] md:w-80" : "w-0 overflow-hidden"}`}>
                 <div className="flex-1 overflow-hidden">
-                    <div className="h-full w-80">
+                    <div className="h-full w-[85vw] md:w-80">
                         <MistralChat
                             onTranscription={(text) => setEditorContent(prev => prev + " " + text)}
                             onProposeDiff={(text) => {
