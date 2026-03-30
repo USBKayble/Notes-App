@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-// import { Mosaic, MosaicNode, MosaicWindow } from "react-mosaic-component";
-// import "react-mosaic-component/react-mosaic-component.css";
 import { Settings, Columns, Sparkles, MessageSquare, Mic, SpellCheck, Image as ImageIcon, RefreshCw, AlertCircle, Ungroup } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { getFileContent } from "@/lib/github";
