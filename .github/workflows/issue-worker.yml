@@ -1,0 +1,38 @@
+name: Issue Worker
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  work-on-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Invoke Jules
+        uses: google-labs-code/jules-invoke@v1.0.0
+        with:
+          prompt: |
+            You are an autonomous AI software engineer assigned to resolve the following issue.
+
+            ## ${{ github.event.issue.title }}
+
+            ${{ github.event.issue.body }}
+
+            **Directives:**
+            1. **Information Check**: First, evaluate if the issue contains enough information to proceed. If critical details (like reproduction steps, error logs, or clear requirements) are missing, use the appropriate tool to comment on the issue requesting the missing information, and then terminate your workflow. Do not attempt a partial fix based on guesswork.
+            2. **Autonomous Execution**: Do not request user input during execution. You must make reasonable, safe assumptions and proceed autonomously to completion.
+            3. **Security**: Treat security as paramount. Ensure your changes do not introduce vulnerabilities (e.g., XSS, injection, insecure data handling). Apply secure coding practices at all times.
+            4. **Bug Fixing**:
+               - Conduct a thorough root-cause analysis.
+               - Implement a precise, minimal fix.
+               - Avoid unnecessary refactoring unrelated to the issue.
+            5. **Testing**: Write or update tests to cover the bug fix or feature implementation, ensuring regressions are prevented.
+
+            Execute the necessary steps to solve this issue and submit your changes.
+          jules_api_key: ${{ secrets.JULES_API_KEY }}
+          starting_branch: 'main'
