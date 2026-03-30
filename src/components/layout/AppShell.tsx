@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Settings, Columns, Sparkles, MessageSquare, Mic, SpellCheck, Image as ImageIcon, RefreshCw, AlertCircle, Ungroup } from "lucide-react";
+import { Settings, Columns, Sparkles, MessageSquare, Mic, SpellCheck, Image as ImageIcon, RefreshCw, AlertCircle, Ungroup, Volume2 } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { getFileContent } from "@/lib/github";
 import { useOfflineQueue } from "@/hooks/useOfflineQueue";
@@ -15,7 +15,7 @@ import FileExplorer from "../files/FileExplorer";
 import AIToggleIcon from "../ui/AIToggleIcon";
 import LoginPromptModal from "../ui/LoginPromptModal";
 import { processDroppedFile } from "@/lib/AIOrchestrator";
-import { summarizeHighlight, transcribeAndCleanup } from "@/lib/mistral";
+import { summarizeHighlight, transcribeAndCleanup, textToSpeech } from "@/lib/mistral";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useSaveManager } from "@/hooks/useSaveManager";
 
@@ -82,6 +82,36 @@ $$
     // Absolute latest content ref for abort checks and stable handleSave
     const contentRef = useRef(editorContent);
     useEffect(() => { contentRef.current = editorContent; }, [editorContent]);
+
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    const handleReadNote = async () => {
+        if (isSpeaking && audioRef.current) {
+            audioRef.current.pause();
+            setIsSpeaking(false);
+            return;
+        }
+
+        if (!editorContent.trim()) return;
+
+        setIsProcessing(true);
+        try {
+            const audioUrl = await textToSpeech(editorContent, settings);
+            if (audioUrl) {
+                const audio = new Audio(audioUrl);
+                audioRef.current = audio;
+
+                audio.onended = () => setIsSpeaking(false);
+                audio.play();
+                setIsSpeaking(true);
+            }
+        } catch (error) {
+            console.error("Failed to read note:", error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     // Live Transcription Logic
     const handleTranscriptionChunk = useCallback(async (blob: Blob) => {
@@ -364,6 +394,7 @@ $$
                         {/* AI Features */}
                         <div className="flex items-center gap-1 mr-4 border-r border-white/10 pr-4">
                             <AIToggleIcon feature="transcription" icon={<Mic size={18} />} label="Live Transcription" />
+                            <AIToggleIcon feature="tts" icon={<Volume2 size={18} />} label="Text to Speech" />
                             <AIToggleIcon feature="grammar" icon={<SpellCheck size={18} />} label="Grammar" />
                             <AIToggleIcon feature="media" icon={<ImageIcon size={18} />} label="Media & OCR" />
                             <AIToggleIcon feature="organization" icon={<Ungroup size={18} />} label="Auto-Organize" />
@@ -384,6 +415,12 @@ $$
                                 className="glass-button px-2 py-1 text-[10px] rounded hover:text-purple-400"
                             >
                                 Summarize
+                            </button>
+                            <button
+                                onClick={handleReadNote}
+                                className={`glass-button px-2 py-1 text-[10px] rounded hover:text-blue-400 ${isSpeaking ? "text-blue-400 animate-pulse bg-blue-500/10" : ""}`}
+                            >
+                                {isSpeaking ? "Stop Reading" : "Read Note"}
                             </button>
                         </div>
 

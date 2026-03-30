@@ -15,6 +15,9 @@ export default function AIToggleIcon({ feature, icon, label }: AIToggleIconProps
     const [showDropdown, setShowDropdown] = useState(false);
 
     const config = settings.aiFeatures[feature];
+    if (!config) {
+        return null;
+    }
     const state = config.state;
 
     const cycleState = () => {
