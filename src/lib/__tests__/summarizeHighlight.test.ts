@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { summarizeHighlight } from '../mistral';
 import { AppSettings } from '../../hooks/useSettings';
 
-// Mock config to ensure we have a fallback API key so getMistralClient succeeds
-vi.mock('../config', () => ({
-  config: { mistralApiKey: 'dummy_key' }
-}));
-
 const mockComplete = vi.fn();
 
 // Mock the Mistral client
@@ -28,6 +23,7 @@ describe('summarizeHighlight', () => {
     vi.clearAllMocks();
 
     mockSettings = {
+      mistralApiKey: 'dummy_key',
       aiFeatures: {
         summarization: {
           model: 'mistral-large-latest',
