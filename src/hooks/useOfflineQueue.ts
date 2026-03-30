@@ -2,11 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { queueStore, QueueItem } from "@/lib/queue-store";
-import { saveFileContent } from "@/lib/github";
+import { saveFileContent, getFileContent } from "@/lib/github";
 import { useSession } from "next-auth/react";
+import { useSettings } from "@/hooks/useSettings";
+import { transcribeAndCleanup } from "@/lib/mistral";
 
 export function useOfflineQueue() {
     const { data: session } = useSession();
+    const { settings } = useSettings();
     const [isOnline, setIsOnline] = useState(true);
     const [queueLength, setQueueLength] = useState(0);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -66,9 +69,20 @@ export function useOfflineQueue() {
                         }
                         case 'AI_JOB': {
                             console.log("Processing AI Job:", item.payload);
-                            // TODO: Implement AI pipeline execution here
-                            // For now we just simulate success or implement basic transcription if needed
-                            // based on sub-type
+                            const { jobType, audioBlob, targetPath } = item.payload;
+
+                            if (jobType === 'TRANSCRIBE_AND_CLEANUP' && audioBlob) {
+                                const text = await transcribeAndCleanup(audioBlob, undefined, settings?.aiFeatures?.transcription?.model);
+
+                                if (text && targetPath && settings?.githubRepo && token) {
+                                    const [owner, repo] = settings.githubRepo.split('/');
+                                    if (owner && repo) {
+                                        const currentContent = await getFileContent(token, owner, repo, targetPath);
+                                        const newContent = currentContent ? `${currentContent}\n\n${text}` : text;
+                                        await saveFileContent(token, owner, repo, targetPath, newContent);
+                                    }
+                                }
+                            }
                             break;
                         }
                     }
