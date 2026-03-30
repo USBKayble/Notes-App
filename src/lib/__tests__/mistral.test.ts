@@ -84,14 +84,11 @@ describe('fetchMistralModels fallback list', () => {
 
 describe('synthesizeNote', () => {
   const mockSettings = {
+    mistralApiKey: 'dummy_key',
     selectedModel: "mistral-large-latest"
   } as AppSettings;
 
   it('should return the integrated content when API succeeds', async () => {
-    // We need to provide a dummy api key to getMistralClient so it returns a client
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockComplete.mockResolvedValueOnce({
       choices: [{ message: { content: 'Integrated Note' } }]
     });
@@ -137,6 +134,7 @@ describe('synthesizeNote', () => {
 
 describe('mediaUnderstanding', () => {
   const mockSettings = {
+    mistralApiKey: 'dummy_key',
     aiFeatures: {
       media: {
         model: 'pixtral-12b-2409',
@@ -149,17 +147,11 @@ describe('mediaUnderstanding', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Provide a dummy API key so getMistralClient returns a client
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     originalCreateObjectURL = global.URL.createObjectURL;
   });
 
   afterEach(async () => {
     global.URL.createObjectURL = originalCreateObjectURL;
-    const { config } = await import('../config');
-    config.mistralApiKey = '';
   });
 
   it('should return null if file is not an image', async () => {

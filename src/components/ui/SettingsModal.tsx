@@ -63,8 +63,27 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                 <div className="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar -mr-2 space-y-6">
 
-                    {/* Github Section */}
+                    {/* Mistral API Section */}
                     <div className="space-y-3">
+                        <label className="text-sm font-medium text-gray-300 block">
+                            Mistral API Key
+                        </label>
+                        <input
+                            type="password"
+                            value={formState.mistralApiKey}
+                            onChange={(e) =>
+                                setFormState({ ...formState, mistralApiKey: e.target.value })
+                            }
+                            className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors placeholder:text-gray-600"
+                            placeholder="Enter your Mistral API Key"
+                        />
+                        <p className="text-xs text-gray-500">
+                            Required to use AI features.
+                        </p>
+                    </div>
+
+                    {/* Github Section */}
+                    <div className="space-y-3 pt-2 border-t border-white/10">
                         <label className="text-sm font-medium text-gray-300 block">
                             GitHub Account
                         </label>
