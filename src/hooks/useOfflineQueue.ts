@@ -48,6 +48,7 @@ export function useOfflineQueue() {
         try {
             setIsProcessing(true);
             const items = await queueStore.getPendingItems();
+            const removePromises: Promise<void>[] = [];
 
             for (const item of items) {
                 if (!navigator.onLine) break; // Stop if we go offline mid-process
@@ -71,13 +72,19 @@ export function useOfflineQueue() {
                             break;
                         }
                     }
-                    await queueStore.remove(item.id);
+                    removePromises.push(
+                        queueStore.remove(item.id).catch(error => {
+                            console.error(`Failed to remove item ${item.id}`, error);
+                        })
+                    );
                 } catch (error) {
                     console.error(`Failed to process item ${item.id}`, error);
                     // For now, mark as failed. In future, implement retry with backoff.
                     await queueStore.updateStatus(item.id, 'FAILED');
                 }
             }
+
+            await Promise.all(removePromises);
         } finally {
             setIsProcessing(false);
             updateQueueLength();

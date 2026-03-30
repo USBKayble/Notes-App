@@ -375,6 +375,7 @@ export const chatWithMistral = async (
 
             if (delta?.toolCalls) {
                 // Accumulate tool calls
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 delta.toolCalls.forEach((tc: any) => {
                     const index = tc.index;
                     if (!toolCallAccumulator[index]) {
