@@ -18,6 +18,18 @@ export async function GET(req: NextRequest) {
         return new NextResponse("Missing parameters", { status: 400 });
     }
 
+    // Security validation against path traversal
+    if (
+        path.includes("..") ||
+        path.startsWith("/") ||
+        owner.includes("/") ||
+        owner.includes("..") ||
+        repo.includes("/") ||
+        repo.includes("..")
+    ) {
+        return new NextResponse("Invalid parameters", { status: 400 });
+    }
+
     const octokit = new Octokit({ auth: session.accessToken });
 
     try {
