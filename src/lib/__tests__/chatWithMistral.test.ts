@@ -29,6 +29,7 @@ describe('chatWithMistral', () => {
     vi.clearAllMocks();
 
     mockSettings = {
+      mistralApiKey: 'dummy_key',
       selectedModel: 'mistral-large-latest',
       aiFeatures: {} as unknown
     } as unknown as AppSettings;
@@ -37,17 +38,13 @@ describe('chatWithMistral', () => {
   });
 
   it('should throw an error if API key is missing', async () => {
+    mockSettings.mistralApiKey = '';
     await expect(
       chatWithMistral([], 'current doc', mockSettings, onChunkMock)
     ).rejects.toThrow("API Key missing");
   });
 
   describe('with valid API key', () => {
-    beforeEach(async () => {
-      // Set a dummy API key for these tests so getMistralClient succeeds
-      const { config } = await import('../config');
-      config.mistralApiKey = 'dummy_key';
-    });
 
     it('should correctly process a basic stream without tool calls and call onChunk', async () => {
       // Create an async generator to mock the stream

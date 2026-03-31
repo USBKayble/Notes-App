@@ -1,13 +1,12 @@
 import { Mistral } from "@mistralai/mistralai";
 import { AppSettings } from "@/hooks/useSettings";
-import { config } from "./config";
 
 // ------------------------------------------------------------------
 // Core Client
 // ------------------------------------------------------------------
 
 export const getMistralClient = (apiKey?: string) => {
-    const key = apiKey || config.mistralApiKey;
+    const key = apiKey;
     if (!key) return null;
     return new Mistral({ apiKey: key.trim() });
 };
@@ -62,7 +61,7 @@ export const fetchMistralModels = async (apiKey?: string) => {
  * TTS: Text to Speech
  */
 export const textToSpeech = async (text: string, settings: AppSettings): Promise<string | null> => {
-    const client = getMistralClient();
+    const client = getMistralClient(settings.mistralApiKey);
     if (!client) return null;
 
     // Safely check for TTS settings for backward compatibility
@@ -70,7 +69,10 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
 
     try {
         // Since @mistralai/mistralai@1.13.0 doesn't have client.audio.speech natively, we use fetch
-        const apiKey = config.mistralApiKey;
+        const apiKey = settings.mistralApiKey;
+        if (!apiKey) return null;
+
+
         const response = await fetch("https://api.mistral.ai/v1/audio/speech", {
             method: "POST",
             headers: {
@@ -153,7 +155,7 @@ export const transcribeAndCleanup = async (audioBlob: Blob, apiKey?: string, mod
  * 1. Transcription Chain
  */
 export const transcriptionChain = async (audioBlob: Blob, settings: AppSettings) => {
-    return transcribeAndCleanup(audioBlob, undefined, settings.aiFeatures.transcription.model);
+    return transcribeAndCleanup(audioBlob, settings.mistralApiKey, settings.aiFeatures.transcription.model);
 };
 
 export interface MediaUnderstandingResult {
@@ -166,8 +168,8 @@ export interface MediaUnderstandingResult {
  * 2. Media Pipeline
  */
 export const mediaUnderstanding = async (file: File | Blob, settings: AppSettings): Promise<MediaUnderstandingResult | null> => {
-    const { aiFeatures } = settings;
-    const client = getMistralClient();
+    const { aiFeatures, mistralApiKey } = settings;
+    const client = getMistralClient(mistralApiKey);
     if (!client) throw new Error("API Key missing");
 
     const isImage = file.type.startsWith('image/');
@@ -215,8 +217,8 @@ export const mediaUnderstanding = async (file: File | Blob, settings: AppSetting
  * 3. Organization
  */
 export const organizeContent = async (text: string, settings: AppSettings, context?: string) => {
-    const { aiFeatures } = settings;
-    const client = getMistralClient();
+    const { aiFeatures, mistralApiKey } = settings;
+    const client = getMistralClient(mistralApiKey);
     if (!client) return text;
 
     try {
@@ -241,8 +243,8 @@ export const organizeContent = async (text: string, settings: AppSettings, conte
  * 4. Summarization
  */
 export const summarizeHighlight = async (text: string, settings: AppSettings) => {
-    const { aiFeatures } = settings;
-    const client = getMistralClient();
+    const { aiFeatures, mistralApiKey } = settings;
+    const client = getMistralClient(mistralApiKey);
     if (!client) return text;
 
     try {
@@ -273,7 +275,7 @@ export const summarizeHighlight = async (text: string, settings: AppSettings) =>
  * 5. Synthesis
  */
 export const synthesizeNote = async (currentNote: string, newContext: string, mediaReff: string, settings: AppSettings): Promise<string> => {
-    const client = getMistralClient();
+    const client = getMistralClient(settings.mistralApiKey);
     if (!client) return currentNote + "\n\n" + newContext;
 
     try {
@@ -307,8 +309,8 @@ export const synthesizeNote = async (currentNote: string, newContext: string, me
  * 6. Live Grammar & Spelling
  */
 export const applyGrammarAndSpelling = async (text: string, settings: AppSettings) => {
-    const { aiFeatures } = settings;
-    const client = getMistralClient();
+    const { aiFeatures, mistralApiKey } = settings;
+    const client = getMistralClient(mistralApiKey);
     if (!client) return text;
 
     try {
@@ -338,8 +340,8 @@ export const chatWithMistral = async (
     settings: AppSettings,
     onChunk: (text: string) => void
 ) => {
-    const { selectedModel } = settings;
-    const client = getMistralClient();
+    const { selectedModel, mistralApiKey } = settings;
+    const client = getMistralClient(mistralApiKey);
     if (!client) throw new Error("API Key missing");
 
     const tools = [

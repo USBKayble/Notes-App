@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
-// Mock the config so we can test the fallback without API key
-vi.mock('../config', () => ({
-  config: { mistralApiKey: '' }
-}));
-
 const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
   mockList: vi.fn().mockRejectedValue(new Error('Network error')),
   mockComplete: vi.fn(),
@@ -45,17 +40,10 @@ describe('transcribeAndCleanup', () => {
   });
 
   it('should throw an error if API Key is missing', async () => {
-    // Override the mock to ensure config has no api key and no api key is passed
-    const { config } = await import('../config');
-    config.mistralApiKey = '';
-
     await expect(transcribeAndCleanup(dummyBlob, undefined)).rejects.toThrow('API Key missing');
   });
 
   it('should return an empty string and log an error if transcription fails', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = new Error('Transcription API error');
     mockAudioComplete.mockRejectedValueOnce(error);
@@ -69,9 +57,6 @@ describe('transcribeAndCleanup', () => {
   });
 
   it('should return the raw transcription and log an error if cleanup fails', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
 
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -87,9 +72,6 @@ describe('transcribeAndCleanup', () => {
   });
 
   it('should return the cleaned up text on full success', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
     mockComplete.mockResolvedValueOnce({
       choices: [{ message: { content: 'Cleaned transcription text' } }]
@@ -112,9 +94,6 @@ describe('transcribeAndCleanup', () => {
   });
 
   it('should return raw text if cleanup returns non-string content', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockAudioComplete.mockResolvedValueOnce({ text: 'Raw transcription text' });
     mockComplete.mockResolvedValueOnce({
       choices: [{ message: { content: null } }]
@@ -126,9 +105,6 @@ describe('transcribeAndCleanup', () => {
   });
 
   it('should return empty string if transcription returns empty text', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockAudioComplete.mockResolvedValueOnce({ text: '' });
 
     const result = await transcribeAndCleanup(dummyBlob, 'dummy_key');
@@ -184,9 +160,7 @@ describe('fetchMistralModels fallback list', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should return an empty array if no API key is provided and config lacks one', async () => {
-    const { config } = await import('../config');
-    config.mistralApiKey = '';
+  it('should return an empty array if no API key is provided', async () => {
     const models = await fetchMistralModels();
     expect(models).toEqual([]);
   });
@@ -194,14 +168,11 @@ describe('fetchMistralModels fallback list', () => {
 
 describe('synthesizeNote', () => {
   const mockSettings = {
+    mistralApiKey: 'dummy_key',
     selectedModel: "mistral-large-latest"
   } as AppSettings;
 
   it('should return the integrated content when API succeeds', async () => {
-    // We need to provide a dummy api key to getMistralClient so it returns a client
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     mockComplete.mockResolvedValueOnce({
       choices: [{ message: { content: 'Integrated Note' } }]
     });
@@ -247,6 +218,7 @@ describe('synthesizeNote', () => {
 
 describe('mediaUnderstanding', () => {
   const mockSettings = {
+    mistralApiKey: 'dummy_key',
     aiFeatures: {
       media: {
         model: 'pixtral-12b-2409',
@@ -259,17 +231,11 @@ describe('mediaUnderstanding', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    // Provide a dummy API key so getMistralClient returns a client
-    const { config } = await import('../config');
-    config.mistralApiKey = 'dummy';
-
     originalCreateObjectURL = global.URL.createObjectURL;
   });
 
   afterEach(async () => {
     global.URL.createObjectURL = originalCreateObjectURL;
-    const { config } = await import('../config');
-    config.mistralApiKey = '';
   });
 
   it('should return null if file is not an image', async () => {
