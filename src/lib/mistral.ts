@@ -104,9 +104,27 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
             return null;
         }
 
+        // Get the actual content type from response headers, with fallback
+        const contentType = response.headers.get("content-type") || "audio/mpeg";
+        
         // Mistral TTS returns raw binary audio data, not JSON
         const audioBuffer = await response.arrayBuffer();
-        const blob = new Blob([audioBuffer], { type: "audio/mpeg" });
+        
+        // Validate that we actually received audio data
+        if (!audioBuffer || audioBuffer.byteLength === 0) {
+            console.error("TTS returned empty response");
+            return null;
+        }
+
+        // Create blob with the correct content type from the API
+        const blob = new Blob([audioBuffer], { type: contentType });
+        
+        // Additional validation: check if blob has actual content
+        if (blob.size === 0) {
+            console.error("TTS created empty blob");
+            return null;
+        }
+
         return URL.createObjectURL(blob);
     } catch (e) {
         console.error("TTS failed", e);
