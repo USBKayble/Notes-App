@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup } from '../mistral';
+import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup, textToSpeech } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
 const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
@@ -317,5 +317,131 @@ describe('mediaUnderstanding', () => {
     expect(result).toBeNull();
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('textToSpeech', () => {
+  const mockSettings: AppSettings = {
+    mistralApiKey: 'test_api_key',
+    githubRepo: 'test/repo',
+    selectedModel: 'mistral-large-latest',
+    aiFeatures: {
+      transcription: { state: 'off', model: 'voxtral-mini-2507', cleanupModel: 'mistral-small-latest', grammarModel: 'mistral-small-latest' },
+      grammar: { state: 'suggest', model: 'mistral-small-latest' },
+      organization: { state: 'off', model: 'mistral-small-latest' },
+      summarization: { state: 'suggest', model: 'mistral-large-latest' },
+      media: { state: 'apply', model: 'pixtral-12b-2409', ocrModel: 'mistral-ocr-latest' },
+      tts: { state: 'on', model: 'voxtral-mini-tts-2603', voiceId: 'test-voice', savedVoices: [] }
+    },
+    editorFont: 'Inter'
+  };
+
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('should return null if API key is missing', async () => {
+    const settingsNoKey = { ...mockSettings, mistralApiKey: '' };
+    const result = await textToSpeech('Hello world', settingsNoKey);
+    expect(result).toBeNull();
+  });
+
+  it('should use valid TTS model and return blob URL on success', async () => {
+    const mockResponse = {
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const result = await textToSpeech('Hello world', mockSettings);
+
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body as string);
+    expect(body.model).toBe('voxtral-mini-tts-2603');
+    expect(body.input).toBe('Hello world');
+    expect(body.voice_id).toBe('test-voice');
+    expect(body.response_format).toBe('mp3');
+    expect(result).toBeTruthy();
+    expect(result).toContain('blob:');
+  });
+
+  it('should return null and log error on API failure', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockResponse = {
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: vi.fn().mockResolvedValue(JSON.stringify({ object: 'error', message: 'Invalid model: voxtral-mini-tts-2603', type: 'invalid_model' }))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const result = await textToSpeech('Hello world', mockSettings);
+
+    expect(consoleSpy).toHaveBeenCalledWith('TTS request failed:', 400, 'Bad Request');
+    expect(consoleSpy).toHaveBeenCalledWith('TTS error response:', expect.stringContaining('Invalid model'));
+    expect(result).toBeNull();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should return null and log error on network failure', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+    const result = await textToSpeech('Hello world', mockSettings);
+
+    expect(consoleSpy).toHaveBeenCalledWith('TTS failed', expect.any(Error));
+    expect(result).toBeNull();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should fallback to default model when invalid model stored', async () => {
+    const settingsWithInvalidModel: AppSettings = {
+      ...mockSettings,
+      aiFeatures: {
+        ...mockSettings.aiFeatures,
+        tts: { state: 'on', model: 'invalid-model-xyz', voiceId: 'test-voice', savedVoices: [] }
+      }
+    };
+    const mockResponse = {
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    await textToSpeech('Hello world', settingsWithInvalidModel);
+
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body as string);
+    expect(body.model).toBe('voxtral-mini-tts-2603');
+  });
+
+  it('should use default voice when voice_id is empty', async () => {
+    const settingsNoVoice: AppSettings = {
+      ...mockSettings,
+      aiFeatures: {
+        ...mockSettings.aiFeatures,
+        tts: { state: 'on', model: 'voxtral-mini-tts-2603', voiceId: '', savedVoices: [] }
+      }
+    };
+    const mockResponse = {
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    await textToSpeech('Hello world', settingsNoVoice);
+
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body as string);
+    expect(body.voice_id).toBe('');
   });
 });

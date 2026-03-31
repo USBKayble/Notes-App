@@ -57,13 +57,13 @@ export const fetchMistralModels = async (apiKey?: string) => {
 // Advanced AI Pipelines
 // ------------------------------------------------------------------
 
-const VALID_TTS_MODELS = ["voxtral-tts-26-03"];
+const VALID_TTS_MODELS = ["voxtral-mini-tts-2603"];
 
 const getValidTtsModel = (model?: string): string => {
     if (model && VALID_TTS_MODELS.includes(model)) {
         return model;
     }
-    return "voxtral-tts-26-03";
+    return "voxtral-mini-tts-2603";
 };
 
 /**
