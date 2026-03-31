@@ -72,7 +72,7 @@ export function useOfflineQueue() {
                             const { jobType, audioBlob, targetPath } = item.payload;
 
                             if (jobType === 'TRANSCRIBE_AND_CLEANUP' && audioBlob) {
-                                const text = await transcribeAndCleanup(audioBlob, undefined, settings?.aiFeatures?.transcription?.model);
+                                const text = await transcribeAndCleanup(audioBlob, settings?.mistralApiKey, settings?.aiFeatures?.transcription?.model);
 
                                 if (text && targetPath && settings?.githubRepo && token) {
                                     const [owner, repo] = settings.githubRepo.split('/');

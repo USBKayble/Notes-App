@@ -117,7 +117,7 @@ $$
     const handleTranscriptionChunk = useCallback(async (blob: Blob) => {
         console.log("Processing audio chunk...", { size: blob.size });
         try {
-            const text = await transcribeAndCleanup(blob, undefined, settings.aiFeatures.transcription.model);
+            const text = await transcribeAndCleanup(blob, settings.mistralApiKey, settings.aiFeatures.transcription.model);
             console.log("Transcription result:", text);
             if (text) {
                 setEditorContent(prev => prev + (prev.endsWith('\n') ? "" : " ") + text);
@@ -125,7 +125,7 @@ $$
         } catch (e) {
             console.error("Live transcription failed details:", e);
         }
-    }, [settings.aiFeatures.transcription.model]);
+    }, [settings.mistralApiKey, settings.aiFeatures.transcription.model]);
 
     const { startRecording: startLiveTranscribe, stopRecording: stopLiveTranscribe } = useAudioRecorder(handleTranscriptionChunk);
 

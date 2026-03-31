@@ -80,33 +80,23 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
                 "Authorization": `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: ttsSettings?.model || "voxtral-mini-latest",
+                model: ttsSettings?.model || "voxtral-tts-mini",
                 input: text,
-                voice: ttsSettings?.voiceId || "en-US",
                 response_format: "mp3"
             })
         });
 
         if (!response.ok) {
             console.error("TTS request failed:", response.status, response.statusText);
+            const errorText = await response.text();
+            console.error("TTS error response:", errorText);
             return null;
         }
 
-        const json = await response.json();
-
-        if (json && typeof json.audio_data === 'string') {
-            // The audioData is a base64 encoded string
-            const byteCharacters = atob(json.audio_data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: "audio/mp3" });
-            return URL.createObjectURL(blob);
-        }
-
-        return null;
+        // Mistral TTS returns raw binary audio data, not JSON
+        const audioBuffer = await response.arrayBuffer();
+        const blob = new Blob([audioBuffer], { type: "audio/mpeg" });
+        return URL.createObjectURL(blob);
     } catch (e) {
         console.error("TTS failed", e);
         return null;
