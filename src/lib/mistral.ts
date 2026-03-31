@@ -104,8 +104,6 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
     }
 };
 
-// Voice Management (TTS)
-
 export interface VoiceInfo {
     id: string;
     name: string;
