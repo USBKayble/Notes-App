@@ -80,8 +80,9 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
                 "Authorization": `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: ttsSettings?.model || "voxtral-tts-mini",
+                model: ttsSettings?.model || "voxtral-mini-tts-2603",
                 input: text,
+                voice_id: ttsSettings?.voiceId || "",
                 response_format: "mp3"
             })
         });
@@ -100,6 +101,112 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
     } catch (e) {
         console.error("TTS failed", e);
         return null;
+    }
+};
+
+export interface VoiceInfo {
+    id: string;
+    name: string;
+    created_at: string;
+    user_id: string | null;
+    languages?: string[];
+    gender?: string;
+    age?: number;
+    tags?: string[];
+}
+
+export const listVoices = async (apiKey: string): Promise<VoiceInfo[]> => {
+    try {
+        const response = await fetch("https://api.mistral.ai/v1/audio/voices", {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`
+            }
+        });
+
+        if (!response.ok) {
+            console.error("List voices failed:", response.status);
+            return [];
+        }
+
+        const data = await response.json();
+        return data.items || [];
+    } catch (e) {
+        console.error("Failed to list voices:", e);
+        return [];
+    }
+};
+
+export const createVoice = async (
+    apiKey: string,
+    name: string,
+    audioFile: File,
+    options?: { languages?: string[]; gender?: string; age?: number }
+): Promise<VoiceInfo | null> => {
+    try {
+        const arrayBuffer = await audioFile.arrayBuffer();
+        const base64Audio = btoa(
+            new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+
+        const formData = new FormData();
+        formData.append("name", name);
+        formData.append("sample_audio", base64Audio);
+        
+        if (options?.languages) {
+            formData.append("languages", JSON.stringify(options.languages));
+        }
+        if (options?.gender) {
+            formData.append("gender", options.gender);
+        }
+        if (options?.age) {
+            formData.append("age", options.age.toString());
+        }
+
+        const response = await fetch("https://api.mistral.ai/v1/audio/voices", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Create voice failed:", response.status, errorText);
+            return null;
+        }
+
+        const data = await response.json();
+        return {
+            id: data.id,
+            name: data.name,
+            created_at: data.created_at,
+            user_id: data.user_id,
+            languages: data.languages,
+            gender: data.gender,
+            age: data.age,
+            tags: data.tags
+        };
+    } catch (e) {
+        console.error("Failed to create voice:", e);
+        return null;
+    }
+};
+
+export const deleteVoice = async (apiKey: string, voiceId: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`https://api.mistral.ai/v1/audio/voices/${encodeURIComponent(voiceId)}`, {
+            method: "DELETE",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`
+            }
+        });
+
+        return response.ok;
+    } catch (e) {
+        console.error("Failed to delete voice:", e);
+        return false;
     }
 };
 

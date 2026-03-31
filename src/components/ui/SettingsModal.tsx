@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, ExternalLink, Key } from "lucide-react";
+import { X, ExternalLink, Key, Plus, Trash2, Mic, Volume2 } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
-// import { fetchMistralModels } from "@/lib/mistral";
+import { listVoices, createVoice, deleteVoice, VoiceInfo } from "@/lib/mistral";
 import { useSession, signIn, signOut } from "next-auth/react";
 import Image from "next/image";
 
@@ -16,11 +16,65 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const { settings, updateSettings } = useSettings();
     const { data: session } = useSession();
     const [formState, setFormState] = useState(settings);
+    
+    const [voices, setVoices] = useState<VoiceInfo[]>([]);
+    const [isLoadingVoices, setIsLoadingVoices] = useState(false);
+    const [isCreatingVoice, setIsCreatingVoice] = useState(false);
+    const [voiceName, setVoiceName] = useState("");
+    const [selectedAudio, setSelectedAudio] = useState<File | null>(null);
 
     // Sync internal state when settings load
     React.useEffect(() => {
         setFormState(settings);
     }, [settings]);
+
+    React.useEffect(() => {
+        if (isOpen && settings.mistralApiKey) {
+            setIsLoadingVoices(true);
+            listVoices(settings.mistralApiKey)
+                .then(setVoices)
+                .finally(() => setIsLoadingVoices(false));
+        }
+    }, [isOpen, settings.mistralApiKey]);
+
+    const handleCreateVoice = async () => {
+        if (!voiceName.trim() || !selectedAudio || !settings.mistralApiKey) return;
+        
+        setIsCreatingVoice(true);
+        const newVoice = await createVoice(settings.mistralApiKey, voiceName, selectedAudio);
+        setIsCreatingVoice(false);
+        
+        if (newVoice) {
+            setVoices([...voices, newVoice]);
+            setVoiceName("");
+            setSelectedAudio(null);
+            setFormState({
+                ...formState,
+                aiFeatures: {
+                    ...formState.aiFeatures,
+                    tts: { ...formState.aiFeatures.tts, voiceId: newVoice.id }
+                }
+            });
+        }
+    };
+
+    const handleDeleteVoice = async (voiceId: string) => {
+        if (!settings.mistralApiKey) return;
+        
+        const success = await deleteVoice(settings.mistralApiKey, voiceId);
+        if (success) {
+            setVoices(voices.filter(v => v.id !== voiceId));
+            if (formState.aiFeatures.tts.voiceId === voiceId) {
+                setFormState({
+                    ...formState,
+                    aiFeatures: {
+                        ...formState.aiFeatures,
+                        tts: { ...formState.aiFeatures.tts, voiceId: "" }
+                    }
+                });
+            }
+        }
+    };
 
     if (!isOpen) return null;
 
@@ -148,6 +202,82 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <p className="text-xs text-gray-500">
                             Type any font name from Google Fonts.
                         </p>
+                    </div>
+
+                    <div className="space-y-3 pt-2 border-t border-white/10">
+                        <label className="text-sm font-medium text-gray-300 block flex items-center gap-2">
+                            <Volume2 size={14} />
+                            Text-to-Speech Voice
+                        </label>
+                        
+                        {settings.mistralApiKey ? (
+                            <>
+                                <select
+                                    value={formState.aiFeatures.tts.voiceId}
+                                    onChange={(e) =>
+                                        setFormState({
+                                            ...formState,
+                                            aiFeatures: {
+                                                ...formState.aiFeatures,
+                                                tts: { ...formState.aiFeatures.tts, voiceId: e.target.value }
+                                            }
+                                        })
+                                    }
+                                    className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
+                                >
+                                    <option value="">Select a voice...</option>
+                                    {voices.map(voice => (
+                                        <option key={voice.id} value={voice.id}>{voice.name}</option>
+                                    ))}
+                                </select>
+
+                                <div className="bg-black/20 border border-white/5 rounded-lg p-3 space-y-2">
+                                    <p className="text-xs text-gray-400">Create new voice (voice cloning)</p>
+                                    <input
+                                        type="text"
+                                        value={voiceName}
+                                        onChange={(e) => setVoiceName(e.target.value)}
+                                        placeholder="Voice name (e.g., 'My Voice')"
+                                        className="w-full bg-black/30 border border-white/10 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors placeholder:text-gray-600"
+                                    />
+                                    <input
+                                        type="file"
+                                        accept="audio/*"
+                                        onChange={(e) => setSelectedAudio(e.target.files?.[0] || null)}
+                                        className="w-full text-xs text-gray-400 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-medium file:bg-purple-600 file:text-white hover:file:bg-purple-500"
+                                    />
+                                    <button
+                                        onClick={handleCreateVoice}
+                                        disabled={!voiceName.trim() || !selectedAudio || isCreatingVoice}
+                                        className="w-full bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-md px-3 py-2 text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <Plus size={14} />
+                                        {isCreatingVoice ? "Creating..." : "Create Voice"}
+                                    </button>
+                                </div>
+
+                                {voices.length > 0 && (
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-gray-500">Saved voices:</p>
+                                        {voices.map(voice => (
+                                            <div key={voice.id} className="flex items-center justify-between bg-white/5 rounded-md px-3 py-2 text-sm">
+                                                <span className="text-white">{voice.name}</span>
+                                                <button
+                                                    onClick={() => handleDeleteVoice(voice.id)}
+                                                    className="text-red-400 hover:text-red-300 transition-colors"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {isLoadingVoices && <p className="text-xs text-gray-500">Loading voices...</p>}
+                            </>
+                        ) : (
+                            <p className="text-xs text-gray-500">Add your Mistral API key to manage TTS voices.</p>
+                        )}
                     </div>
                 </div>
 
