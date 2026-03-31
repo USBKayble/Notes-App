@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS: AppSettings = {
         organization: { state: "off", model: "mistral-small-latest" },
         summarization: { state: "suggest", model: "mistral-large-latest" },
         media: { state: "apply", model: "pixtral-12b-2409", ocrModel: "mistral-ocr-latest" },
-        tts: { state: "off", model: "voxtral-mini-tts-2603", voiceId: "", savedVoices: [] },
+        tts: { state: "off", model: "voxtral-tts-26-03", voiceId: "", savedVoices: [] },
     },
 
     editorFont: "Inter"
