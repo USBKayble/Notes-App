@@ -74,6 +74,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                     
                     // Ensure each feature also has its defaults if partially saved
                     const features = mergedSettings.aiFeatures;
+                    const validTtsModels = ["voxtral-mini-tts-2603"];
                     (Object.keys(DEFAULT_SETTINGS.aiFeatures) as Array<keyof typeof DEFAULT_SETTINGS.aiFeatures>).forEach(key => {
                         if (features[key]) {
                             // @ts-expect-error - dynamic merging of feature settings
@@ -81,6 +82,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
                                 ...DEFAULT_SETTINGS.aiFeatures[key],
                                 ...features[key]
                             };
+                            if (key === "tts" && features[key].model && !validTtsModels.includes(features[key].model)) {
+                                features[key].model = "voxtral-mini-tts-2603";
+                            }
                         }
                     });
 

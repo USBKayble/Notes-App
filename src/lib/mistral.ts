@@ -57,6 +57,15 @@ export const fetchMistralModels = async (apiKey?: string) => {
 // Advanced AI Pipelines
 // ------------------------------------------------------------------
 
+const VALID_TTS_MODELS = ["voxtral-mini-tts-2603"];
+
+const getValidTtsModel = (model?: string): string => {
+    if (model && VALID_TTS_MODELS.includes(model)) {
+        return model;
+    }
+    return "voxtral-mini-tts-2603";
+};
+
 /**
  * TTS: Text to Speech
  */
@@ -72,6 +81,7 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
         const apiKey = settings.mistralApiKey;
         if (!apiKey) return null;
 
+        const model = getValidTtsModel(ttsSettings?.model);
 
         const response = await fetch("https://api.mistral.ai/v1/audio/speech", {
             method: "POST",
@@ -80,7 +90,7 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
                 "Authorization": `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: ttsSettings?.model || "voxtral-mini-tts-2603",
+                model: model,
                 input: text,
                 voice_id: ttsSettings?.voiceId || "",
                 response_format: "mp3"
