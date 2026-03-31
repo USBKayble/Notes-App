@@ -370,7 +370,7 @@ describe('textToSpeech', () => {
     const body = JSON.parse(fetchCall[1].body as string);
     expect(body.model).toBe('voxtral-mini-tts-2603');
     expect(body.input).toBe('Hello world');
-    expect(body.voice_id).toBe('test-voice');
+    expect(body.voice).toBe('test-voice');
     expect(body.response_format).toBe('mp3');
     expect(result).toBeTruthy();
     expect(result).toContain('blob:');
@@ -415,13 +415,13 @@ describe('textToSpeech', () => {
         tts: { state: 'on', model: 'invalid-model-xyz', voiceId: 'test-voice', savedVoices: [] }
       }
     };
-    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
+    const mockHeaders = new Map([["content-type", "application/json"]]);
     const mockResponse = {
       ok: true,
       headers: {
         get: (key: string) => mockHeaders.get(key) || null
       },
-      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+      json: vi.fn().mockResolvedValue({ audio_data: "c2FtcGxlIGF1ZGlvIGRhdGE=" })
     };
     global.fetch = vi.fn().mockResolvedValue(mockResponse);
 
@@ -440,13 +440,13 @@ describe('textToSpeech', () => {
         tts: { state: 'on', model: 'voxtral-mini-tts-2603', voiceId: '', savedVoices: [] }
       }
     };
-    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
+    const mockHeaders = new Map([["content-type", "application/json"]]);
     const mockResponse = {
       ok: true,
       headers: {
         get: (key: string) => mockHeaders.get(key) || null
       },
-      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+      json: vi.fn().mockResolvedValue({ audio_data: "c2FtcGxlIGF1ZGlvIGRhdGE=" })
     };
     global.fetch = vi.fn().mockResolvedValue(mockResponse);
 
@@ -454,6 +454,6 @@ describe('textToSpeech', () => {
 
     const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body as string);
-    expect(body.voice_id).toBe('');
+    expect(body.voice).toBe('en_paul_neutral');
   });
 });
