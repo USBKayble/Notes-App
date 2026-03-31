@@ -72,6 +72,7 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
         const apiKey = settings.mistralApiKey;
         if (!apiKey) return null;
 
+
         const response = await fetch("https://api.mistral.ai/v1/audio/speech", {
             method: "POST",
             headers: {

@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
-// Mock the config so we can test the fallback without API key
-vi.mock('../config', () => ({
-  config: { mistralApiKey: '' }
-}));
-
 const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
   mockList: vi.fn().mockRejectedValue(new Error('Network error')),
   mockComplete: vi.fn(),
@@ -165,7 +160,7 @@ describe('fetchMistralModels fallback list', () => {
     consoleSpy.mockRestore();
   });
 
-  it('should return an empty array if no API key is provided and config lacks one', async () => {
+  it('should return an empty array if no API key is provided', async () => {
     const models = await fetchMistralModels();
     expect(models).toEqual([]);
   });
