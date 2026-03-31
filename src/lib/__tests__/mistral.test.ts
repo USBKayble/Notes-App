@@ -354,8 +354,12 @@ describe('textToSpeech', () => {
   });
 
   it('should use valid TTS model and return blob URL on success', async () => {
+    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
     const mockResponse = {
       ok: true,
+      headers: {
+        get: (key: string) => mockHeaders.get(key) || null
+      },
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
     };
     global.fetch = vi.fn().mockResolvedValue(mockResponse);
@@ -411,8 +415,12 @@ describe('textToSpeech', () => {
         tts: { state: 'on', model: 'invalid-model-xyz', voiceId: 'test-voice', savedVoices: [] }
       }
     };
+    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
     const mockResponse = {
       ok: true,
+      headers: {
+        get: (key: string) => mockHeaders.get(key) || null
+      },
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
     };
     global.fetch = vi.fn().mockResolvedValue(mockResponse);
@@ -432,8 +440,12 @@ describe('textToSpeech', () => {
         tts: { state: 'on', model: 'voxtral-mini-tts-2603', voiceId: '', savedVoices: [] }
       }
     };
+    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
     const mockResponse = {
       ok: true,
+      headers: {
+        get: (key: string) => mockHeaders.get(key) || null
+      },
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
     };
     global.fetch = vi.fn().mockResolvedValue(mockResponse);

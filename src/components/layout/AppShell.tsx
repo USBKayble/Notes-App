@@ -103,11 +103,19 @@ $$
                 audioRef.current = audio;
 
                 audio.onended = () => setIsSpeaking(false);
-                audio.play();
+                audio.onerror = () => {
+                    console.error("Audio playback error:", audio.error);
+                    setIsSpeaking(false);
+                    alert("Failed to play audio. Please check your settings and try again.");
+                };
+                await audio.play();
                 setIsSpeaking(true);
+            } else {
+                alert("Failed to generate audio. Please check your TTS settings and API key.");
             }
         } catch (error) {
             console.error("Failed to read note:", error);
+            alert("Failed to read note. Please check your settings.");
         } finally {
             setIsProcessing(false);
         }
