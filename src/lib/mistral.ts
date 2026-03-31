@@ -92,7 +92,7 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
             body: JSON.stringify({
                 model: model,
                 input: text,
-                voice_id: ttsSettings?.voiceId || "",
+                voice: ttsSettings?.voiceId || "en_paul_neutral",
                 response_format: "mp3"
             })
         });
@@ -104,20 +104,40 @@ export const textToSpeech = async (text: string, settings: AppSettings): Promise
             return null;
         }
 
-        // Get the actual content type from response headers, with fallback
         const contentType = response.headers.get("content-type") || "audio/mpeg";
-        
-        // Mistral TTS returns raw binary audio data, not JSON
-        const audioBuffer = await response.arrayBuffer();
-        
-        // Validate that we actually received audio data
-        if (!audioBuffer || audioBuffer.byteLength === 0) {
-            console.error("TTS returned empty response");
-            return null;
-        }
+        let blob: Blob;
 
-        // Create blob with the correct content type from the API
-        const blob = new Blob([audioBuffer], { type: contentType });
+        if (contentType.includes("application/json")) {
+            // Mistral TTS currently returns JSON with base64 audio data for this model
+            const data = await response.json();
+            const base64Audio = data.audio_data;
+
+            if (!base64Audio) {
+                console.error("TTS returned empty response or missing audio_data");
+                return null;
+            }
+
+            // Convert base64 to binary
+            const binaryString = atob(base64Audio);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            blob = new Blob([bytes], { type: "audio/mpeg" });
+        } else {
+            // Mistral TTS returns raw binary audio data
+            const audioBuffer = await response.arrayBuffer();
+
+            // Validate that we actually received audio data
+            if (!audioBuffer || audioBuffer.byteLength === 0) {
+                console.error("TTS returned empty response");
+                return null;
+            }
+
+            blob = new Blob([audioBuffer], { type: contentType });
+        }
         
         // Additional validation: check if blob has actual content
         if (blob.size === 0) {
