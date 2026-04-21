@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup, textToSpeech } from '../mistral';
+import { fetchMistralModels, synthesizeNote, mediaUnderstanding, transcribeAndCleanup, textToSpeech, createVoice } from '../mistral';
 import { AppSettings } from '@/hooks/useSettings';
 
 const { mockList, mockComplete, mockProcess, mockAudioComplete } = vi.hoisted(() => ({
@@ -455,5 +455,133 @@ describe('textToSpeech', () => {
     const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body as string);
     expect(body.voice).toBe('en_paul_neutral');
+  });
+});
+
+describe('createVoice', () => {
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('should successfully create a voice without optional parameters', async () => {
+    const mockVoiceResponse = {
+      id: 'voice_123',
+      name: 'Test Voice',
+      created_at: '2024-01-01T00:00:00Z',
+      user_id: 'user_123',
+      languages: [],
+      gender: null,
+      age: null,
+      tags: []
+    };
+
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockVoiceResponse)
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const dummyFile = new File(['dummy audio content'], 'test.mp3', { type: 'audio/mpeg' });
+    const apiKey = 'test_api_key';
+
+    const result = await createVoice(apiKey, 'Test Voice', dummyFile);
+
+    expect(result).toEqual(mockVoiceResponse);
+
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(fetchCall[0]).toBe('https://api.mistral.ai/v1/audio/voices');
+    expect(fetchCall[1].method).toBe('POST');
+    expect(fetchCall[1].headers).toEqual({
+      'Authorization': `Bearer ${apiKey}`
+    });
+
+    const formData = fetchCall[1].body as FormData;
+    expect(formData.get('name')).toBe('Test Voice');
+    expect(formData.has('sample_audio')).toBe(true);
+    expect(formData.has('languages')).toBe(false);
+    expect(formData.has('gender')).toBe(false);
+    expect(formData.has('age')).toBe(false);
+  });
+
+  it('should successfully create a voice with optional parameters', async () => {
+    const mockVoiceResponse = {
+      id: 'voice_123',
+      name: 'Test Voice',
+      created_at: '2024-01-01T00:00:00Z',
+      user_id: 'user_123',
+      languages: ['en', 'fr'],
+      gender: 'female',
+      age: 25,
+      tags: []
+    };
+
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockVoiceResponse)
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const dummyFile = new File(['dummy audio content'], 'test.mp3', { type: 'audio/mpeg' });
+    const apiKey = 'test_api_key';
+
+    const result = await createVoice(apiKey, 'Test Voice', dummyFile, {
+      languages: ['en', 'fr'],
+      gender: 'female',
+      age: 25
+    });
+
+    expect(result).toEqual(mockVoiceResponse);
+
+    const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const formData = fetchCall[1].body as FormData;
+    expect(formData.get('name')).toBe('Test Voice');
+    expect(formData.get('languages')).toBe('["en","fr"]');
+    expect(formData.get('gender')).toBe('female');
+    expect(formData.get('age')).toBe('25');
+  });
+
+  it('should handle API errors and return null', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const mockResponse = {
+      ok: false,
+      status: 400,
+      text: vi.fn().mockResolvedValue('Bad Request')
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const dummyFile = new File(['dummy audio content'], 'test.mp3', { type: 'audio/mpeg' });
+    const apiKey = 'test_api_key';
+
+    const result = await createVoice(apiKey, 'Test Voice', dummyFile);
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith('Create voice failed:', 400, 'Bad Request');
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should handle network errors and return null', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const networkError = new Error('Network failure');
+
+    global.fetch = vi.fn().mockRejectedValue(networkError);
+
+    const dummyFile = new File(['dummy audio content'], 'test.mp3', { type: 'audio/mpeg' });
+    const apiKey = 'test_api_key';
+
+    const result = await createVoice(apiKey, 'Test Voice', dummyFile);
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to create voice:', networkError);
+
+    consoleSpy.mockRestore();
   });
 });
