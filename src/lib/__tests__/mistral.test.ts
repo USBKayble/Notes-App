@@ -456,6 +456,63 @@ describe('textToSpeech', () => {
     const body = JSON.parse(fetchCall[1].body as string);
     expect(body.voice).toBe('en_paul_neutral');
   });
+
+  it('should return null and log error if JSON response missing audio_data', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockHeaders = new Map([["content-type", "application/json"]]);
+    const mockResponse = {
+      ok: true,
+      headers: { get: (key: string) => mockHeaders.get(key) || null },
+      json: vi.fn().mockResolvedValue({})
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const result = await textToSpeech('Hello', mockSettings);
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith("TTS returned empty response or missing audio_data");
+    consoleSpy.mockRestore();
+  });
+
+  it('should return null and log error if binary response returns empty buffer', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
+    const mockResponse = {
+      ok: true,
+      headers: { get: (key: string) => mockHeaders.get(key) || null },
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const result = await textToSpeech('Hello', mockSettings);
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith("TTS returned empty response");
+    consoleSpy.mockRestore();
+  });
+
+  it('should return null if created blob has size 0', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const mockHeaders = new Map([["content-type", "audio/mpeg"]]);
+    const mockResponse = {
+      ok: true,
+      headers: { get: (key: string) => mockHeaders.get(key) || null },
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    const originalBlob = global.Blob;
+    // Mock Blob to return size 0 using an ES class
+    global.Blob = class {
+      size = 0;
+      constructor() {}
+    } as any;
+
+    const result = await textToSpeech('Hello', mockSettings);
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith("TTS created empty blob");
+
+    global.Blob = originalBlob;
+    consoleSpy.mockRestore();
+  });
 });
 
 describe('createVoice', () => {
