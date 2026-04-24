@@ -21,6 +21,11 @@ interface EditorPaneProps {
     currentFilePath?: string | null;
 }
 
+interface GrayMatterResult {
+    content: string;
+    matter?: string;
+}
+
 export default function EditorPane({ value, onChange, onFilePaste }: EditorPaneProps) {
     const { settings } = useSettings();
     const isInternalUpdate = useRef(false);
@@ -49,9 +54,8 @@ export default function EditorPane({ value, onChange, onFilePaste }: EditorPaneP
 
     const { body, rawFrontmatter } = useMemo(() => {
         try {
-            const parsed = matter(value);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const frontmatter = (value.startsWith('---') && (parsed as any).matter) ? (parsed as any).matter : null;
+            const parsed = matter(value) as unknown as GrayMatterResult;
+            const frontmatter = (value.startsWith('---') && parsed.matter) ? parsed.matter : null;
             return {
                 body: transformForDisplay(parsed.content),
                 rawFrontmatter: frontmatter
