@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
+const DEBUG = false;
+
 // WAV Encoding Helpers
 function writeString(view: DataView, offset: number, string: string) {
     for (let i = 0; i < string.length; i++) {
@@ -101,8 +103,9 @@ export function useAudioRecorder(onChunk: (blob: Blob) => void) {
 
         // Discard if no speaking activity was detected
         if (!hasSpeaking.current) {
-            // Optional: Log discarded chunks (throttled/debug)
-            // console.log("Silent chunk discarded");
+            if (DEBUG) {
+                console.log("Silent chunk discarded");
+            }
             audioChunks.current = [];
             totalLength.current = 0;
             return;
@@ -118,7 +121,9 @@ export function useAudioRecorder(onChunk: (blob: Blob) => void) {
 
         // Encode to WAV
         const wavBlob = encodeWAV(result, audioContext.current.sampleRate);
-        console.log("Flushing WAV chunk:", { size: wavBlob.size, durationMs: (totalLength.current / audioContext.current.sampleRate) * 1000 });
+        if (DEBUG) {
+            console.log("Flushing WAV chunk:", { size: wavBlob.size, durationMs: (totalLength.current / audioContext.current.sampleRate) * 1000 });
+        }
 
         onChunk(wavBlob);
 
@@ -211,7 +216,7 @@ export function useAudioRecorder(onChunk: (blob: Blob) => void) {
 
                 // Debug Log every ~1s (60 frames)
                 frameCount++;
-                if (frameCount % 60 === 0) {
+                if (DEBUG && frameCount % 60 === 0) {
                     console.log(`Audio Stats | RMS: ${rms.toFixed(4)} | Smooth: ${vol.toFixed(4)} | Floor: ${noiseFloor.current.toFixed(4)} | Speech?: ${hasSpeaking.current}`);
                 }
 
@@ -226,7 +231,7 @@ export function useAudioRecorder(onChunk: (blob: Blob) => void) {
                         const chunkDuration = now - lastChunkTime.current;
 
                         if (silenceDuration > SILENCE_DURATION && chunkDuration > 1000) {
-                            if (hasSpeaking.current) {
+                            if (hasSpeaking.current && DEBUG) {
                                 console.log("Silence detected, flushing speech chunk...");
                             }
                             processAndFlush();
