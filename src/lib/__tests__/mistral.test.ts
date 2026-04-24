@@ -504,7 +504,7 @@ describe('textToSpeech', () => {
     global.Blob = class {
       size = 0;
       constructor() {}
-    } as any;
+    } as unknown as typeof Blob;
 
     const result = await textToSpeech('Hello', mockSettings);
     expect(result).toBeNull();
