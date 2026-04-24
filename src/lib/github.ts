@@ -178,7 +178,6 @@ export const getFileContent = async (token: string, owner: string, repo: string,
         }
         return "";
     } catch {
-        // console.error("Failed to get content", e);
         return "";
     }
 };
